@@ -1,0 +1,1049 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="An astronomy escape room for grades 7-10.">
+<title>Kepler Observatory Escape</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Cinzel:wght@500;700&family=VT323&display=swap">
+<style>
+*{box-sizing:border-box}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0}
+img{max-width:100%}
+[hidden]{display:none!important}
+
+/* Layout: one-screen game — HUD strip, top-down room that scales to fit, inventory tray; puzzles open in a parchment/brass dialog. Committed single dark theme (night observatory). */
+:root{
+  --night:#0b1024; --floor:#19203f; --panel:#141a35; --panel-2:#1d2548;
+  --brass:#d4ab52; --brass-dim:#8f7336; --parchment:#f1e6c8; --ink:#2a2233;
+  --teal:#67d6c8; --text:#ebe8f7; --muted:#a8a4c6; --good:#7fd892; --bad:#ff8a7a;
+  --moonlit:#f4efd9; --moondark:#2b3152;
+  --display:"Cinzel", "Trajan Pro", Georgia, serif;
+  --body:"Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --mono:"VT323", ui-monospace, "Courier New", monospace;
+  color-scheme:dark;
+}
+html,body{height:100%}
+body{background:var(--night);color:var(--text);font-family:var(--body);font-size:16px;line-height:1.45;overflow:hidden}
+.app{height:100%;display:flex;flex-direction:column;gap:8px;padding-block:10px;padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));box-sizing:border-box}
+.hud{display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px}
+.brand{font-family:var(--display);font-weight:700;letter-spacing:.06em;color:var(--brass);font-size:18px;margin-right:auto}
+.stat{display:flex;gap:6px;align-items:baseline;font-variant-numeric:tabular-nums}
+.stat span{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.08em}
+.stat b{font-size:17px}
+.stage{flex:1;min-height:0;position:relative;display:flex;align-items:center;justify-content:center}
+#room{width:100%;height:100%;display:block;touch-action:none;user-select:none;-webkit-user-select:none}
+.status{min-height:24px;text-align:center;color:var(--muted);font-size:14px}
+.status b{color:var(--brass)}
+.tray{display:flex;gap:8px;align-items:center;overflow-x:auto;padding-bottom:2px}
+.tray-label{font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);flex:none}
+.item{flex:none;display:flex;align-items:center;gap:6px;background:var(--panel-2);border:1px solid var(--brass-dim);color:var(--text);border-radius:8px;padding:6px 10px;font:inherit;font-size:14px;cursor:pointer}
+.item:hover,.item:focus-visible{border-color:var(--brass);outline:none}
+.item .dot{width:12px;height:12px;border-radius:50%;flex:none}
+.empty{color:var(--muted);font-size:14px;font-style:italic}
+
+/* room objects */
+.obj{cursor:pointer;transition:filter .2s}
+.obj.near{filter:drop-shadow(0 0 6px var(--brass)) drop-shadow(0 0 2px var(--brass))}
+.obj:hover{filter:drop-shadow(0 0 4px var(--teal))}
+.svgtxt{font-family:var(--display);font-weight:700;letter-spacing:.08em}
+.orbit{transform-box:view-box;transform-origin:500px 400px;animation:spin linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.twinkle{animation:tw 3s ease-in-out infinite alternate}
+@keyframes tw{from{opacity:.35}to{opacity:1}}
+@media (prefers-reduced-motion: reduce){.orbit,.twinkle{animation:none}}
+
+/* overlays */
+.overlay{position:fixed;inset:0;background:rgba(5,8,20,.78);display:flex;align-items:center;justify-content:center;z-index:20;padding:max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px))}
+.panel{background:var(--panel);border:1px solid var(--brass-dim);border-radius:14px;width:100%;max-width:640px;max-height:100%;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.5);position:relative}
+.panel-in{padding:22px 24px 24px;display:flex;flex-direction:column;gap:14px}
+.eyebrow{font-size:12px;text-transform:uppercase;letter-spacing:.14em;color:var(--teal)}
+h1,h2{font-family:var(--display);color:var(--brass);margin:0;text-wrap:balance;letter-spacing:.03em}
+h1{font-size:clamp(28px,6vw,44px);line-height:1.1}
+h2{font-size:24px}
+p{margin:0;max-width:65ch}
+.close{position:absolute;top:10px;right:10px;background:none;border:1px solid transparent;color:var(--muted);font-size:26px;line-height:1;width:40px;height:40px;border-radius:8px;cursor:pointer}
+.close:hover,.close:focus-visible{color:var(--text);border-color:var(--brass-dim);outline:none}
+.btn{font:inherit;font-weight:700;background:var(--brass);color:#1b1526;border:0;border-radius:9px;padding:11px 18px;cursor:pointer}
+.btn:hover{filter:brightness(1.08)}
+.btn:focus-visible,.opt:focus-visible,.dial:focus-visible,.key:focus-visible,input:focus-visible{outline:3px solid var(--teal);outline-offset:2px}
+.btn.ghost{background:transparent;color:var(--text);border:1px solid var(--brass-dim)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.opts{display:grid;gap:10px}
+.opt{font:inherit;text-align:left;background:var(--panel-2);color:var(--text);border:1px solid #39416e;border-radius:10px;padding:12px 14px;cursor:pointer;line-height:1.35}
+.opt{display:flex;gap:12px;align-items:center}
+.opt .letter{flex:none;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:14px;background:#2b3360;color:var(--brass);border:1px solid var(--brass-dim)}
+.opt.right .letter{background:var(--good);color:#10301a;border-color:var(--good)}
+.opt:focus-visible{border-color:var(--teal);background:#25305e}
+.keyhelp{font-size:13px;color:var(--muted)}
+.opt:hover:not(:disabled){border-color:var(--brass)}
+.opt.right{border-color:var(--good);background:rgba(127,216,146,.14)}
+.opt.wrong{border-color:var(--bad);background:rgba(255,138,122,.1);color:var(--muted);text-decoration:line-through}
+.opt:disabled{cursor:default}
+.feedback{border-radius:10px;padding:12px 14px;font-size:15px}
+.feedback.good{background:rgba(127,216,146,.12);border:1px solid rgba(127,216,146,.5)}
+.feedback.bad{background:rgba(255,138,122,.1);border:1px solid rgba(255,138,122,.45)}
+.feedback.info{background:rgba(103,214,200,.08);border:1px solid rgba(103,214,200,.4)}
+.pips{display:flex;gap:6px}
+.pip{width:26px;height:6px;border-radius:3px;background:#323a66}
+.pip.on{background:var(--brass)}
+.qtext{font-size:19px;font-weight:700;line-height:1.35}
+.moonfig{display:flex;justify-content:center;padding:8px;background:#070a18;border-radius:10px}
+.paper{background:var(--parchment);color:var(--ink);border-radius:8px;padding:18px 20px;display:flex;flex-direction:column;gap:10px;font-size:16px}
+.paper h3{font-family:var(--display);margin:0;font-size:18px;color:var(--ink)}
+.paper .hand{font-style:italic}
+.terminal{background:#06120f;border:1px solid #1f4a43;border-radius:10px;padding:16px;font-family:var(--mono);font-size:22px;color:var(--teal);line-height:1.2;display:flex;flex-direction:column;gap:10px}
+.terminal input{font:inherit;background:#0b201b;color:var(--teal);border:1px solid #2a6a5f;border-radius:6px;padding:6px 10px;width:100%;max-width:260px;box-sizing:border-box;text-transform:uppercase}
+.terminal .opt{font-family:var(--body);font-size:16px}
+.dials{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+.dial{display:flex;flex-direction:column;align-items:center;gap:6px;background:#070a18;border:1px solid var(--brass-dim);border-radius:12px;padding:10px;cursor:pointer;color:var(--muted);font:inherit;font-size:12px}
+.wheels{display:flex;gap:10px;justify-content:center}
+.wheel{display:flex;flex-direction:column;align-items:center;gap:4px}
+.wheel button{font:inherit;width:48px;height:34px;border-radius:8px;border:1px solid var(--brass-dim);background:var(--panel-2);color:var(--text);cursor:pointer}
+.wheel output{font-family:var(--mono);font-size:44px;width:48px;text-align:center;background:#070a18;border-radius:8px;color:var(--brass);font-variant-numeric:tabular-nums}
+.keypad{display:grid;grid-template-columns:repeat(3,64px);gap:8px;justify-content:center}
+.key{font:inherit;font-size:22px;font-weight:700;height:52px;border-radius:10px;border:1px solid #3d4677;background:var(--panel-2);color:var(--text);cursor:pointer}
+.key.enter{background:var(--brass);color:#1b1526;border:0}
+.screen{font-family:var(--mono);font-size:46px;letter-spacing:.35em;text-align:center;background:#070a18;border-radius:10px;padding:6px 0 6px .35em;color:var(--brass)}
+.screen.denied{color:var(--bad)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px}
+.card{border:1px dashed #3d4677;border-radius:10px;padding:8px 10px;font-size:14px;color:var(--muted)}
+.card.have{border-style:solid;border-color:var(--brass-dim);color:var(--text)}
+.card b{font-family:var(--mono);font-size:26px;color:var(--brass);display:block;line-height:1}
+.books{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+.book{font:inherit;text-align:left;border:0;border-radius:6px;padding:14px 12px;min-height:90px;color:#fff;cursor:pointer;font-weight:700;box-shadow:inset 6px 0 0 rgba(0,0,0,.25)}
+.phases{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;text-align:center;font-size:13px}
+.phases div{display:flex;flex-direction:column;align-items:center;gap:2px}
+.planets{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.planets td,.planets th{padding:4px 6px;border-bottom:1px solid rgba(42,34,51,.2);text-align:left}
+.title-sky{position:absolute;inset:0;pointer-events:none;opacity:.6}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.stats div{background:var(--panel-2);border-radius:10px;padding:10px;text-align:center}
+.stats b{display:block;font-size:24px;font-variant-numeric:tabular-nums;color:var(--brass)}
+.stats span{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+label.fld{display:flex;flex-direction:column;gap:6px;font-size:14px;color:var(--muted)}
+label.fld input{font:inherit;font-size:17px;background:var(--panel-2);color:var(--text);border:1px solid #3d4677;border-radius:8px;padding:10px 12px}
+.controls{font-size:14px;color:var(--muted);display:grid;gap:4px}
+kbd{font-family:var(--body);font-size:12px;border:1px solid #4a5285;border-bottom-width:2px;border-radius:4px;padding:1px 5px;color:var(--text)}
+.toast{position:fixed;left:50%;bottom:max(80px, calc(env(safe-area-inset-bottom, 0px) + 80px));transform:translateX(-50%);background:var(--brass);color:#1b1526;font-weight:700;padding:10px 16px;border-radius:10px;z-index:30;box-shadow:0 8px 24px rgba(0,0,0,.4);max-width:calc(100% - 32px)}
+.shake{animation:shake .35s}
+@keyframes shake{20%,60%{transform:translateX(-6px)}40%,80%{transform:translateX(6px)}}
+/* hands-on puzzles */
+.pz-label{font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
+#pz{display:flex;flex-direction:column;gap:10px}
+.slots,.pool{display:flex;flex-wrap:wrap;gap:8px}
+.slots.list,.pool.list{flex-direction:column}
+.slot,.piece{font:inherit;color:var(--text);background:var(--panel-2);border:1px solid #39416e;border-radius:10px;padding:8px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:84px}
+.list .slot,.list .piece{flex-direction:row;text-align:left;gap:12px;min-width:0;padding:10px 12px}
+.slot.emptyslot{border-style:dashed;cursor:default;background:transparent}
+.slot.locked{border-color:var(--good);background:rgba(127,216,146,.12);cursor:default}
+.slot:disabled{color:var(--text)}
+.slot-n{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;flex:none}
+.list .slot-n{width:64px}
+.slot-empty{color:var(--muted);font-size:13px;padding:12px 4px}
+.piece:hover,.slot:not(:disabled):hover{border-color:var(--brass)}
+.piece:focus-visible,.slot:focus-visible,.mitem:focus-visible{outline:3px solid var(--teal);outline-offset:2px}
+.clip{display:flex;flex-direction:column;gap:2px;font-family:Georgia,"Times New Roman",serif}
+.clip b{letter-spacing:.02em}
+.clip span{font-size:14px;color:var(--muted);font-style:italic}
+.starglow{width:46px;height:46px;border-radius:50%;background:radial-gradient(circle,#fff 0 16%,var(--c) 42%,transparent 72%)}
+.match{display:grid;grid-template-columns:minmax(0,.75fr) minmax(0,1.6fr);gap:10px}
+.mcol{display:flex;flex-direction:column;gap:8px;min-width:0}
+.mitem{font:inherit;text-align:left;display:flex;gap:10px;align-items:center;background:var(--panel-2);color:var(--text);border:1px solid #39416e;border-radius:10px;padding:10px 12px;cursor:pointer;line-height:1.3}
+.mitem:hover:not(:disabled){border-color:var(--brass)}
+.mitem.sel{border-color:var(--teal);box-shadow:inset 0 0 0 2px var(--teal)}
+.mitem.paired{border-color:var(--brass-dim)}
+.mitem.locked{border-color:var(--good);background:rgba(127,216,146,.12);cursor:default;color:var(--text)}
+.mitem .tag{flex:none;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:#2b3360;color:var(--brass);font-weight:700;font-size:13px}
+.mitem.paired .tag{background:var(--brass);color:#1b1526}
+.mitem.locked .tag{background:var(--good);color:#10301a}
+.drawwrap{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start}
+.field{position:relative;flex:1 1 260px;max-width:400px;aspect-ratio:1/1;background:radial-gradient(circle at 40% 35%,#14205a,#060a1e 75%);border-radius:12px;border:1px solid var(--brass-dim)}
+.field svg{position:absolute;inset:0;width:100%;height:100%}
+.field{touch-action:none}
+.field line.hit{stroke:transparent;stroke-width:16;cursor:pointer;pointer-events:stroke}
+.field line.hit:hover{stroke:rgba(255,138,122,.25)}
+.field line.pv{stroke:var(--teal);stroke-dasharray:4 4;pointer-events:none}
+.field line{stroke:#9fb3ff;stroke-width:2.5;vector-effect:non-scaling-stroke;stroke-linecap:round}
+.field line.bad{stroke:var(--bad);stroke-dasharray:6 4}
+.star{position:absolute;width:40px;height:40px;z-index:1;transform:translate(-50%,-50%);border-radius:50%;border:0;background:transparent;cursor:pointer;display:grid;place-items:center;padding:0}
+.star::after{content:"";width:6px;height:6px;border-radius:50%;background:#c9d1ff;box-shadow:0 0 4px #c9d1ff}
+.star.bright::after{width:10px;height:10px;background:#fff;box-shadow:0 0 9px #fff}
+.star.sel{box-shadow:0 0 0 2px var(--teal);background:rgba(103,214,200,.15)}
+.star:focus-visible{outline:2px solid var(--teal)}
+.guide{flex:0 1 150px;align-items:center;text-align:center;padding:12px;font-size:14px}
+@media (max-width:520px){.match{grid-template-columns:1fr}}
+@media (max-width:520px){.panel-in{padding:18px 16px 20px}.qtext{font-size:17px}.stats{grid-template-columns:1fr 1fr 1fr}.brand{font-size:15px}}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <div class="hud">
+    <div class="brand">Kepler Observatory</div>
+    <div class="stat"><span>Time</span><b id="hTime">0:00</b></div>
+    <div class="stat"><span>Stations</span><b id="hDone">0/6</b></div>
+    <div class="stat"><span>Mistakes</span><b id="hWrong">0</b></div>
+    <button class="btn ghost" id="helpBtn" style="padding:6px 12px;font-size:14px">Mission</button>
+  </div>
+  <div class="stage">
+    <svg id="room" viewBox="0 0 1000 720" preserveAspectRatio="xMidYMid meet" aria-label="Top-down view of the observatory room">
+      <defs>
+        <pattern id="tiles" width="60" height="60" patternUnits="userSpaceOnUse"><rect width="60" height="60" fill="#19203f"/><path d="M60 0H0V60" fill="none" stroke="#222a52" stroke-width="2"/></pattern>
+        <linearGradient id="wallg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#241c38"/><stop offset="1" stop-color="#3a2e52"/></linearGradient>
+        <radialGradient id="sunG"><stop offset="0" stop-color="#fff6c4"/><stop offset="1" stop-color="#f0a52e"/></radialGradient>
+        <linearGradient id="metal" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#59617f"/><stop offset=".5" stop-color="#8d95b3"/><stop offset="1" stop-color="#59617f"/></linearGradient>
+        <linearGradient id="wood" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6a4630"/><stop offset="1" stop-color="#4c3122"/></linearGradient>
+      </defs>
+      <rect width="1000" height="720" fill="#0b1024"/>
+      <rect x="30" y="120" width="940" height="580" fill="url(#tiles)"/>
+      <!-- compass rose inlay -->
+      <g fill="none" stroke="#d4ab52" opacity=".35">
+        <circle cx="500" cy="400" r="150" stroke-width="2"/><circle cx="500" cy="400" r="162"/>
+        <path d="M500 238 L512 388 L662 400 L512 412 L500 562 L488 412 L338 400 L488 388Z" stroke-width="2"/>
+      </g>
+      <text x="500" y="230" text-anchor="middle" class="svgtxt" fill="#d4ab52" opacity=".45" font-size="16">N</text>
+      <!-- walls -->
+      <rect x="0" y="0" width="1000" height="120" fill="url(#wallg)"/>
+      <g stroke="#2c2342" stroke-width="2"><path d="M60 0V112M300 0V112M640 0V112M920 0V112"/></g>
+      <rect x="0" y="112" width="1000" height="9" fill="#4d4068"/>
+      <rect x="0" y="120" width="30" height="600" fill="#2a2140"/>
+      <rect x="970" y="120" width="30" height="600" fill="#2a2140"/>
+      <rect x="0" y="700" width="1000" height="20" fill="#2a2140"/>
+
+      <!-- Star chart -->
+      <g class="obj" data-obj="starchart">
+        <rect x="70" y="18" width="200" height="92" rx="3" fill="#f1e6c8" stroke="#d4ab52" stroke-width="3"/>
+        <rect x="80" y="26" width="180" height="76" fill="#1d2550"/>
+        <g stroke="#9fb3ff" stroke-width="1.2" opacity=".8"><path d="M120 40 L135 62 L150 64 L162 66 L178 88 M135 62 L128 90 M162 66 L170 42"/><path d="M205 45 L222 50 L236 48 L244 60 L232 72"/></g>
+        <g fill="#fff"><circle cx="120" cy="40" r="2.6"/><circle cx="170" cy="42" r="2.2"/><circle cx="135" cy="62" r="2"/><circle cx="150" cy="64" r="2"/><circle cx="162" cy="66" r="2"/><circle cx="128" cy="90" r="2.4"/><circle cx="178" cy="88" r="2.6"/><circle cx="205" cy="45" r="2"/><circle cx="222" cy="50" r="2"/><circle cx="236" cy="48" r="2"/><circle cx="244" cy="60" r="2"/><circle cx="232" cy="72" r="2"/></g>
+      </g>
+      <!-- Moon log calendar -->
+      <g class="obj" data-obj="calendar">
+        <rect x="300" y="22" width="100" height="84" rx="3" fill="#f1e6c8"/>
+        <rect x="300" y="22" width="100" height="18" fill="#8b3a3a"/>
+        <text x="350" y="35" text-anchor="middle" class="svgtxt" font-size="10" fill="#f1e6c8">MOON LOG</text>
+        <g stroke="#2a2233" stroke-width="1.2"><circle cx="322" cy="60" r="9" fill="#2a2233"/><circle cx="350" cy="60" r="9" fill="none"/><circle cx="378" cy="60" r="9" fill="none"/><circle cx="336" cy="86" r="9" fill="none"/></g>
+        <g font-size="11" fill="#2a2233" text-anchor="middle" font-weight="700"><text x="350" y="64">?</text><text x="378" y="64">?</text><text x="336" y="90">?</text></g>
+      </g>
+      <!-- Airlock door -->
+      <g class="obj" data-obj="door">
+        <rect x="450" y="8" width="120" height="112" rx="6" fill="#3d4466" stroke="#8d95b3" stroke-width="3"/>
+        <rect id="doorL" x="458" y="16" width="52" height="104" fill="url(#metal)"/>
+        <rect id="doorR" x="510" y="16" width="52" height="104" fill="url(#metal)"/>
+        <circle cx="510" cy="50" r="17" fill="#0e1430" stroke="#c7cde3" stroke-width="3"/>
+        <path d="M510 16V120" stroke="#2b3152" stroke-width="2"/>
+        <circle id="doorLight" cx="510" cy="13" r="4" fill="#ff5a4a"/>
+        <rect x="582" y="42" width="34" height="46" rx="4" fill="#1d2235" stroke="#8d95b3"/>
+        <g fill="#d4ab52"><circle cx="592" cy="55" r="2.5"/><circle cx="599" cy="55" r="2.5"/><circle cx="606" cy="55" r="2.5"/><circle cx="592" cy="64" r="2.5"/><circle cx="599" cy="64" r="2.5"/><circle cx="606" cy="64" r="2.5"/><circle cx="592" cy="73" r="2.5"/><circle cx="599" cy="73" r="2.5"/><circle cx="606" cy="73" r="2.5"/></g>
+      </g>
+      <!-- Space race poster -->
+      <g class="obj" data-obj="poster">
+        <rect x="680" y="16" width="200" height="92" fill="#1b2f5e" stroke="#c9483b" stroke-width="5"/>
+        <path d="M725 98 L725 52 L733 34 L741 52 L741 98Z" fill="#e8e1cf"/><path d="M725 88 L716 100 L725 96Z M741 88 L750 100 L741 96Z" fill="#c9483b"/>
+        <circle cx="830" cy="44" r="13" fill="#d8d3c0"/><path d="M808 66 L860 30" stroke="#d8d3c0" stroke-dasharray="3 4"/>
+        <text x="808" y="86" text-anchor="middle" class="svgtxt" font-size="14" fill="#f1e6c8">THE SPACE</text>
+        <text x="808" y="101" text-anchor="middle" class="svgtxt" font-size="14" fill="#f1e6c8">RACE</text>
+      </g>
+      <!-- Window -->
+      <g class="obj" data-obj="window">
+        <rect x="2" y="190" width="26" height="140" fill="#0a1440" stroke="#8d95b3" stroke-width="3"/>
+        <g fill="#fff"><circle class="twinkle" cx="12" cy="210" r="1.6"/><circle cx="20" cy="240" r="1.2"/><circle class="twinkle" cx="10" cy="270" r="1.8" style="animation-delay:1s"/><circle cx="19" cy="300" r="1.3"/><circle class="twinkle" cx="13" cy="318" r="1.2" style="animation-delay:2s"/></g>
+      </g>
+      <!-- Telescope -->
+      <g class="obj" data-obj="telescope">
+        <rect x="120" y="225" width="80" height="70" fill="transparent"/>
+        <g stroke="#8a6a2e" stroke-width="5" stroke-linecap="round"><path d="M165 262 L135 236 M165 262 L190 238 M165 262 L170 296"/></g>
+        <g transform="translate(160 258) rotate(-12)"><rect x="-80" y="-11" width="110" height="22" rx="5" fill="#d4ab52" stroke="#8a6a2e" stroke-width="2"/><rect x="-88" y="-14" width="14" height="28" rx="3" fill="#a9853b"/><rect x="26" y="-6" width="16" height="12" rx="2" fill="#5a4520"/></g>
+        <circle cx="165" cy="262" r="6" fill="#5a4520"/>
+      </g>
+      <!-- Bookshelf -->
+      <g class="obj" data-obj="bookshelf">
+        <rect x="905" y="170" width="60" height="220" fill="url(#wood)" stroke="#2f1e14" stroke-width="2"/>
+        <g><rect x="912" y="178" width="48" height="16" fill="#3b6e8f"/><rect x="912" y="196" width="40" height="12" fill="#a8452f"/><rect x="912" y="210" width="46" height="18" fill="#d4ab52"/><rect x="912" y="230" width="36" height="12" fill="#4f7a49"/><rect x="912" y="250" width="48" height="10" fill="#6a4c8f"/><rect x="912" y="262" width="44" height="20" fill="#3b6e8f"/><rect x="912" y="284" width="30" height="12" fill="#c9483b"/><rect x="912" y="304" width="48" height="16" fill="#2f4f6f"/><rect x="912" y="322" width="42" height="12" fill="#d4ab52"/><rect x="912" y="336" width="48" height="18" fill="#4f7a49"/><rect x="912" y="358" width="38" height="12" fill="#a8452f"/><rect x="912" y="372" width="46" height="12" fill="#6a4c8f"/></g>
+      </g>
+      <!-- Archive cabinet -->
+      <g class="obj" data-obj="cabinet">
+        <rect x="905" y="410" width="60" height="100" rx="3" fill="#59617f" stroke="#2b3152" stroke-width="2"/>
+        <path d="M905 443H965M905 476H965" stroke="#2b3152" stroke-width="2"/>
+        <rect x="915" y="424" width="20" height="5" rx="2" fill="#c7cde3"/><rect x="915" y="457" width="20" height="5" rx="2" fill="#c7cde3"/><rect x="915" y="490" width="20" height="5" rx="2" fill="#c7cde3"/>
+        <circle cx="950" cy="460" r="9" fill="#1d2235" stroke="#d4ab52" stroke-width="2"/><path d="M950 453V460" stroke="#d4ab52" stroke-width="2"/>
+      </g>
+      <!-- Orrery -->
+      <g class="obj" data-obj="orrery">
+        <circle cx="500" cy="400" r="72" fill="url(#wood)" stroke="#2f1e14" stroke-width="3"/>
+        <g fill="none" stroke="#d4ab52" stroke-width="1" opacity=".55"><circle cx="500" cy="400" r="20"/><circle cx="500" cy="400" r="31"/><circle cx="500" cy="400" r="43"/><circle cx="500" cy="400" r="58"/></g>
+        <circle cx="500" cy="400" r="11" fill="url(#sunG)"/>
+        <g class="orbit" style="animation-duration:6s"><circle cx="520" cy="400" r="3" fill="#b8b2a6"/></g>
+        <g class="orbit" style="animation-duration:11s"><circle cx="500" cy="369" r="4.5" fill="#e8c27a"/></g>
+        <g class="orbit" style="animation-duration:17s"><circle cx="457" cy="400" r="5" fill="#4f8fd9"/></g>
+        <g class="orbit" style="animation-duration:28s"><circle cx="500" cy="458" r="4" fill="#d0644a"/></g>
+      </g>
+      <!-- Desk: computer + drawer -->
+      <rect x="380" y="600" width="240" height="80" rx="4" fill="url(#wood)" stroke="#2f1e14" stroke-width="2"/>
+      <g class="obj" data-obj="computer">
+        <rect x="380" y="600" width="120" height="80" fill="transparent"/>
+        <rect x="398" y="618" width="86" height="26" rx="3" fill="#10161e" stroke="#2a6a5f" stroke-width="2"/>
+        <rect x="404" y="623" width="74" height="16" fill="#0f3a34"/><rect x="408" y="627" width="40" height="3" fill="#67d6c8"/><rect x="408" y="632" width="28" height="3" fill="#67d6c8" opacity=".6"/>
+        <rect x="408" y="652" width="66" height="16" rx="2" fill="#2b3152"/>
+      </g>
+      <g class="obj" data-obj="drawer">
+        <rect x="500" y="600" width="120" height="80" fill="transparent"/>
+        <circle cx="590" cy="636" r="14" fill="#f2d98a" opacity=".25"/><circle cx="590" cy="636" r="7" fill="#f2d98a"/>
+        <rect x="520" y="601" width="70" height="14" fill="#5a3a28" stroke="#2f1e14"/>
+        <rect x="545" y="604" width="20" height="5" rx="2" fill="#d4ab52"/><circle cx="572" cy="607" r="2.2" fill="#1b1526"/>
+        <rect x="518" y="640" width="40" height="28" fill="#f1e6c8" transform="rotate(-8 538 654)"/>
+      </g>
+      <!-- Lunar lockbox -->
+      <g class="obj" data-obj="moonbox">
+        <rect x="90" y="600" width="110" height="80" rx="4" fill="url(#wood)" stroke="#2f1e14" stroke-width="2"/>
+        <rect x="108" y="614" width="74" height="52" rx="4" fill="#232a4d" stroke="#d4ab52" stroke-width="2"/>
+        <g fill="#f4efd9" stroke="#d4ab52"><circle cx="122" cy="640" r="6"/><circle cx="138" cy="640" r="6"/><circle cx="154" cy="640" r="6"/><circle cx="170" cy="640" r="6"/></g>
+      </g>
+      <!-- Trash -->
+      <g class="obj" data-obj="trash">
+        <circle cx="862" cy="642" r="22" fill="#3d4466" stroke="#8d95b3" stroke-width="2"/><circle cx="862" cy="642" r="16" fill="#1d2235"/>
+        <path d="M852 636 l8 -4 l6 6 l-4 8 l-9 -2Z" fill="#f1e6c8"/>
+      </g>
+      <!-- Plant -->
+      <g class="obj" data-obj="plant">
+        <circle cx="925" cy="645" r="22" fill="#9b5a3a"/>
+        <g fill="#4f9a5a"><ellipse cx="925" cy="630" rx="7" ry="18"/><ellipse cx="940" cy="645" rx="18" ry="7"/><ellipse cx="910" cy="645" rx="18" ry="7"/><ellipse cx="925" cy="660" rx="7" ry="16"/><ellipse cx="936" cy="634" rx="5" ry="14" transform="rotate(45 936 634)"/></g>
+      </g>
+      <!-- solved badges -->
+      <g id="badges"></g>
+      <!-- walk target marker -->
+      <circle id="marker" r="10" fill="none" stroke="#67d6c8" stroke-width="2" opacity="0"/>
+      <!-- Player -->
+      <g id="player">
+        <g id="playerRot">
+          <ellipse cx="0" cy="0" rx="20" ry="22" fill="#000" opacity=".25" transform="translate(3 4)"/>
+          <rect x="-24" y="-13" width="12" height="26" rx="4" fill="#c7cde3" stroke="#59617f"/>
+          <circle r="18" fill="#f2f2f5" stroke="#8d95b3" stroke-width="2"/>
+          <path d="M4 -11 A13 13 0 0 1 4 11 Q14 0 4 -11Z" fill="#d4ab52"/>
+          <ellipse cx="9" cy="0" rx="7" ry="11" fill="#1c3d6e"/>
+          <ellipse cx="11" cy="-4" rx="2" ry="3" fill="#9fd4ff" opacity=".8"/>
+        </g>
+      </g>
+    </svg>
+  </div>
+  <div class="status" id="status" aria-live="polite">Walk with <kbd>W A S D</kbd> or arrow keys, or tap the floor. Tap an object to inspect it.</div>
+  <div class="tray"><span class="tray-label">Inventory</span><div id="inv" class="row" style="flex-wrap:nowrap"></div></div>
+</div>
+
+<div class="overlay" id="modal" hidden><div class="panel" role="dialog" aria-modal="true" id="panel"></div></div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+/* ---------- Content ---------- */
+const QB = {
+const:[
+ {q:"What is a constellation?",a:"A named pattern or region of stars as seen from Earth",w:["A group of stars that are all close together in space","A small galaxy that orbits the Milky Way","A cluster of planets around one star"],why:"Constellation stars only look close together from Earth. Many are at very different distances from us.",hint:"Think about where we are standing when we see the pattern."},
+ {q:"How many official constellations does the International Astronomical Union (IAU) recognize?",a:"88",w:["12","48","110"],why:"In the 1920s the IAU divided the entire sky into 88 constellations. (Twelve is just the zodiac; 48 is how many the ancient astronomer Ptolemy listed.)",hint:"It is more than 80 but fewer than 90."},
+ {q:"Which star stays almost fixed in the northern sky and can be found using the two \"pointer stars\" of the Big Dipper?",a:"Polaris (the North Star)",w:["Sirius","Betelgeuse","Vega"],why:"Polaris sits almost directly above Earth's North Pole, so it barely moves as Earth rotates.",hint:"Its nickname tells you which direction it marks."},
+ {q:"The Big Dipper is part of which larger constellation?",a:"Ursa Major (the Great Bear)",w:["Orion (the Hunter)","Cassiopeia (the Queen)","Ursa Minor (the Little Bear)"],why:"The Big Dipper is an asterism: a smaller, well-known pattern inside Ursa Major.",hint:"Think big. The name means \"Great Bear.\""},
+ {q:"Orion is easy to spot because of a short, straight row of bright stars called his belt. How many stars make up Orion's Belt?",a:"3",w:["2","5","7"],why:"Alnitak, Alnilam, and Mintaka form Orion's Belt.",hint:"Fewer than five."},
+ {q:"Why do we see different constellations in winter than in summer?",a:"As Earth orbits the Sun, our night side faces a different part of space",w:["The constellations orbit Earth once a year","Earth is closer to the stars in winter","Clouds block different stars each season"],why:"At night we look away from the Sun. As Earth travels around its orbit, \"away from the Sun\" points toward different stars.",hint:"What does Earth do over the course of one year?"},
+ {q:"The 12 zodiac constellations lie along the ecliptic. What is the ecliptic?",a:"The path the Sun appears to follow across the sky over a year",w:["The line where the sky meets the horizon","The edge of the Milky Way","The Moon's orbit around Earth"],why:"As Earth orbits, the Sun appears to drift against the background stars along the ecliptic, passing through the zodiac constellations.",hint:"It is connected to the Sun, not the Moon."}
+],
+sky:[
+ {q:"Why do the Sun, Moon, and stars appear to rise in the east and set in the west?",a:"Earth rotates from west to east",w:["The Sun orbits Earth once a day","Earth rotates from east to west","Earth orbits the Sun once a day"],why:"As Earth spins toward the east, objects in the sky appear to move the opposite way, toward the west.",hint:"Objects seem to move opposite to the direction we are turning."},
+ {q:"How long does it take Earth to rotate once on its axis?",a:"About 24 hours",w:["About 365 days","About 12 hours","About 29.5 days"],why:"One rotation gives one day-night cycle. 365 days is one orbit around the Sun, and 29.5 days is the Moon's cycle of phases.",hint:"One rotation = one day and one night."},
+ {q:"From the Northern Hemisphere, how do stars near Polaris appear to move during the night?",a:"They circle around Polaris and never set",w:["They rise in the north and set in the south","They stay perfectly still all night","They move straight from east to west and set"],why:"These circumpolar stars trace circles around the North Star as Earth rotates.",hint:"Polaris is like the hub of a wheel."},
+ {q:"What causes Earth to have seasons?",a:"The tilt of Earth's axis",w:["Earth's distance from the Sun changing","The Sun getting hotter and cooler","The Moon blocking sunlight"],why:"Earth's axis is tilted about 23.5°. The hemisphere tilted toward the Sun gets more direct sunlight and longer days. Earth is actually closest to the Sun in early January!",hint:"Earth is closest to the Sun in January, during northern winter."},
+ {q:"Earth turns 360° in about 24 hours. About how many degrees do stars appear to move across the sky each hour?",a:"15°",w:["1°","24°","360°"],why:"360° ÷ 24 hours = 15° per hour.",hint:"Divide 360 by 24."},
+ {q:"In the Northern Hemisphere, on which day is the noon Sun highest in the sky?",a:"The June solstice (around June 21)",w:["The December solstice (around December 21)","The March equinox (around March 20)","January 1"],why:"At the June solstice the Northern Hemisphere is tilted most toward the Sun, so the noon Sun is highest and daylight lasts longest.",hint:"It is the longest day of the year in the north."}
+],
+solar:[
+ {q:"Which is the largest planet in our solar system?",a:"Jupiter",w:["Saturn","Earth","Neptune"],why:"Jupiter is so big that more than 1,000 Earths could fit inside it.",hint:"It is named after the king of the Roman gods."},
+ {q:"Which planet has the hottest surface?",a:"Venus",w:["Mercury","Mars","Jupiter"],why:"Mercury is closer to the Sun, but Venus's thick carbon dioxide atmosphere traps heat, keeping its surface around 465 °C (870 °F).",hint:"Think greenhouse effect, not distance."},
+ {q:"What are the four inner planets, in order from the Sun?",a:"Mercury, Venus, Earth, Mars",w:["Venus, Mercury, Earth, Mars","Mercury, Earth, Venus, Mars","Mercury, Venus, Mars, Earth"],why:"Memory trick: \"My Very Educated Mother Just Served Us Nachos.\"",hint:"Earth is the third planet from the Sun."},
+ {q:"The main asteroid belt lies between the orbits of which two planets?",a:"Mars and Jupiter",w:["Earth and Mars","Jupiter and Saturn","Venus and Earth"],why:"The asteroid belt separates the rocky inner planets from the giant outer planets.",hint:"It divides the rocky planets from the gas giants."},
+ {q:"What force keeps the planets in orbit around the Sun?",a:"Gravity",w:["Magnetism","Friction","Solar wind"],why:"The Sun's gravity pulls the planets inward while their forward motion carries them sideways, so they travel in curved orbits.",hint:"It is the same force that keeps your feet on the ground."},
+ {q:"Which planet has the largest and brightest ring system?",a:"Saturn",w:["Jupiter","Uranus","Mars"],why:"All four giant planets have rings, but Saturn's icy rings are by far the biggest and brightest.",hint:"It is the sixth planet from the Sun."},
+ {q:"In 2006, Pluto was reclassified. What is it called now?",a:"A dwarf planet",w:["A moon of Neptune","An asteroid","A comet"],why:"Pluto has not cleared its orbit of other objects, so the IAU classifies it as a dwarf planet.",hint:"It is still a planet... just a small kind."},
+ {q:"About how long does sunlight take to reach Earth?",a:"About 8 minutes",w:["Instantly","About 8 seconds","About 8 hours"],why:"Earth is about 150 million km from the Sun. Light covers that distance in about 8 minutes and 20 seconds.",hint:"Light is fast, but not instant. Think minutes."}
+],
+race:[
+ {q:"What was the first artificial satellite to orbit Earth?",a:"Sputnik 1",w:["Explorer 1","Apollo 11","Hubble"],why:"The Soviet Union launched Sputnik 1 on October 4, 1957, starting the Space Race.",hint:"It was Soviet, and its name means \"fellow traveler.\""},
+ {q:"Who was the first human to travel into space, in 1961?",a:"Yuri Gagarin",w:["Neil Armstrong","John Glenn","Alan Shepard"],why:"Soviet cosmonaut Yuri Gagarin orbited Earth aboard Vostok 1 on April 12, 1961.",hint:"He was a Soviet cosmonaut."},
+ {q:"Who was the first person to walk on the Moon?",a:"Neil Armstrong",w:["Buzz Aldrin","Yuri Gagarin","Michael Collins"],why:"Armstrong stepped onto the Moon on July 20, 1969, during Apollo 11. Buzz Aldrin followed him soon after, while Michael Collins orbited above.",hint:"\"That's one small step for man...\""},
+ {q:"Which U.S. agency was created in 1958, partly in response to Sputnik?",a:"NASA",w:["The FBI","NOAA","The CIA"],why:"NASA, the National Aeronautics and Space Administration, was founded in 1958.",hint:"Its name includes \"Space Administration.\""},
+ {q:"The Space Race was mainly a competition between which two countries?",a:"The United States and the Soviet Union",w:["The United States and China","Great Britain and Germany","The Soviet Union and Japan"],why:"The Space Race was part of the Cold War rivalry between the U.S. and the USSR.",hint:"It was part of the Cold War."},
+ {q:"Which U.S. president challenged the nation in 1961 to land a person on the Moon before the decade was out?",a:"John F. Kennedy",w:["Dwight D. Eisenhower","Richard Nixon","Lyndon B. Johnson"],why:"Kennedy set the goal in a 1961 speech to Congress. Apollo 11 met it in July 1969.",hint:"He was president from 1961 to 1963."},
+ {q:"Who was the first woman to fly in space?",a:"Valentina Tereshkova",w:["Sally Ride","Mae Jemison","Christa McAuliffe"],why:"Soviet cosmonaut Valentina Tereshkova flew in 1963. Sally Ride became the first American woman in space twenty years later, in 1983.",hint:"She flew for the Soviet Union in 1963."}
+],
+moon:[
+ {q:"Why does the Moon go through phases?",a:"We see different amounts of its sunlit half as it orbits Earth",w:["Earth's shadow covers different parts of the Moon","Clouds block parts of the Moon","The Moon changes shape as it orbits"],why:"The Sun always lights half of the Moon. As the Moon orbits Earth, we see more or less of that lit half. Earth's shadow only falls on the Moon during a lunar eclipse.",hint:"Half of the Moon is always lit by the Sun."},
+ {q:"About how long does the Moon take to go through a full cycle of phases?",a:"About 29.5 days",w:["About 7 days","About 24 hours","About 365 days"],why:"New moon to new moon takes about 29.5 days, roughly one month. The word \"month\" comes from \"moon.\"",hint:"The word \"month\" comes from \"moon.\""},
+ {q:"Which phase of the Moon is shown? (As seen from the Northern Hemisphere.)",moon:1,a:"Waxing crescent",w:["Waning crescent","First quarter","Waxing gibbous"],why:"A thin sliver lit on the right is a waxing crescent. It appears a few days after the new moon.",hint:"Lit on the right means the lit part is growing."},
+ {q:"Which phase of the Moon is shown? (As seen from the Northern Hemisphere.)",moon:5,a:"Waning gibbous",w:["Waxing gibbous","Third quarter","Full moon"],why:"More than half lit, with the lit side on the left: the lit part is shrinking after the full moon.",hint:"More than half lit, and lit on the left (shrinking)."},
+ {q:"Which phase of the Moon is shown? (As seen from the Northern Hemisphere.)",moon:6,a:"Third quarter",w:["First quarter","Waning crescent","New moon"],why:"Exactly half lit on the left. It comes about a week after the full moon.",hint:"Half lit, on the left side."},
+ {q:"What does \"waxing\" mean when describing the Moon?",a:"The lit part we see is growing each night",w:["The lit part we see is shrinking each night","The Moon is moving closer to Earth","The Moon is completely lit"],why:"Waxing means growing. Waning means shrinking.",hint:"The opposite of waning."},
+ {q:"During a new moon, where is the Moon?",a:"Between Earth and the Sun",w:["On the opposite side of Earth from the Sun","Inside Earth's shadow","Behind the Sun"],why:"At new moon the Moon's lit side faces the Sun and away from us, so we see the dark side.",hint:"Its lit side faces away from Earth."},
+ {q:"A lunar eclipse can only happen during which phase?",a:"Full moon",w:["New moon","First quarter","Waxing crescent"],why:"A lunar eclipse happens when Earth is directly between the Sun and Moon. That lineup only occurs at full moon.",hint:"Earth must be between the Sun and the Moon."},
+ {q:"Why do we always see the same side of the Moon from Earth?",a:"The Moon rotates exactly once each time it orbits Earth",w:["The Moon does not rotate at all","Earth's shadow hides the other side","The far side is always dark"],why:"This is called synchronous rotation (the Moon is \"tidally locked\"). The far side gets just as much sunlight as the near side.",hint:"The Moon does spin, just very slowly."}
+],
+general:[
+ {q:"What is the Sun?",a:"A star",w:["A planet","A comet","A galaxy"],why:"The Sun is a medium-sized, middle-aged star. It looks so much bigger and brighter than other stars only because it is so close.",hint:"It is the same kind of object as the points of light at night."},
+ {q:"A light-year is a measure of...",a:"Distance",w:["Time","Brightness","Speed"],why:"A light-year is the distance light travels in one year: about 9.5 trillion km (almost 6 trillion miles).",hint:"It is how far light goes in a year."},
+ {q:"What is the name of the galaxy we live in?",a:"The Milky Way",w:["Andromeda","The Whirlpool Galaxy","The Large Magellanic Cloud"],why:"Our solar system is in one of the Milky Way's spiral arms. Andromeda is our nearest large neighbor galaxy.",hint:"It shares its name with a candy bar."},
+ {q:"After the Sun, which star is closest to Earth?",a:"Proxima Centauri",w:["Polaris","Sirius","Betelgeuse"],why:"Proxima Centauri is about 4.2 light-years away. Polaris, by comparison, is more than 400 light-years away.",hint:"\"Proxima\" means \"nearest.\""},
+ {q:"A \"shooting star\" is really...",a:"A meteor: a bit of space rock burning up in our atmosphere",w:["A star falling out of the sky","A comet crashing into Earth","A satellite reflecting sunlight"],why:"Most meteors are smaller than a grain of sand. They glow because friction with the air heats them up.",hint:"It happens in Earth's atmosphere."},
+ {q:"What color are the hottest stars?",a:"Blue",w:["Red","Orange","Yellow"],why:"Blue stars can be hotter than 30,000 °C. Red stars are the coolest, around 3,000 °C.",hint:"It is the opposite of what a stove burner suggests."},
+ {q:"What are comets mostly made of?",a:"Ice, dust, and rock",w:["Hot gas, like a small star","Solid iron","Fire"],why:"Comets are \"dirty snowballs.\" Near the Sun their ice turns to gas, forming a glowing coma and long tails.",hint:"They are often called \"dirty snowballs.\""},
+ {q:"About how old is the universe?",a:"About 13.8 billion years",w:["About 4.6 billion years","About 6,000 years","About 1 million years"],why:"4.6 billion years is the age of our solar system. The universe is about three times older.",hint:"It is older than our solar system (4.6 billion years)."}
+]};
+
+const PHASES = ["New moon","Waxing crescent","First quarter","Waxing gibbous","Full moon","Waning gibbous","Third quarter","Waning crescent"];
+const PLANET_ORDER = ["venus","earth","mars","jupiter"];
+const PLANET_COLOR = {venus:"#e8c27a",earth:"#4f8fd9",mars:"#d0644a",jupiter:"#d9a77a"};
+
+const STATIONS = {
+ starchart:{name:"Star Chart",topic:"Constellations",bank:"const",reward:"key"},
+ telescope:{name:"Telescope",topic:"Movement of the Sky",bank:"sky",reward:"venus"},
+ orrery:{name:"Orrery",topic:"The Solar System",bank:"solar",reward:"earth"},
+ moonbox:{name:"Lunar Lockbox",topic:"Phases of the Moon",bank:"moon",reward:"mars",lock:true},
+ cabinet:{name:"Archive Cabinet",topic:"The Space Race",bank:"race",reward:"jupiter",lock:true},
+ computer:{name:"Observatory Terminal",topic:"General Astronomy",bank:"general",reward:"order",lock:true}
+};
+const INTRO = {
+ starchart:"A framed chart of the winter sky. Under the glass, a brass plate reads: <i>\"Prove you know the stars and the drawer key is yours.\"</i>",
+ telescope:"The old brass telescope still points out the window. A card is taped to the eyepiece: <i>\"Why does the sky turn? Answer two, then line up the star photos, and Venus will show its number.\"</i>",
+ orrery:"A clockwork model of the inner solar system ticks quietly. A slot in the base holds a sealed card marked <b>EARTH</b>.",
+ moonbox:"The lockbox is open. Inside is a card marked <b>MARS</b>, sealed behind a second lid with two questions etched in brass and a row of empty phase slots.",
+ cabinet:"The archive drawer slides open. Folders of Space Race newspaper clippings... and a sealed envelope marked <b>JUPITER</b>.",
+ computer:"ACCESS GRANTED. Welcome, Dr. Kepler.<br>AIRLOCK OVERRIDE requires a knowledge check."
+};
+const ITEMS = {
+ key:{name:"Brass Key",color:"#d4ab52",desc:()=>"A small brass key. The paper tag reads <b>DESK</b>."},
+ note:{name:"Login Note",color:"#f1e6c8",desc:()=>`<div class="paper"><h3>Terminal login</h3><p class="hand">Kept forgetting my password, so here's a reminder:</p><p class="hand">It's the name of the first animal to orbit Earth (1957).</p><p class="hand">Can't remember? There's a book about it in the library. — Dr. K</p></div>`},
+ venus:{name:"Venus Card",color:PLANET_COLOR.venus,planet:true},
+ earth:{name:"Earth Card",color:PLANET_COLOR.earth,planet:true},
+ mars:{name:"Mars Card",color:PLANET_COLOR.mars,planet:true},
+ jupiter:{name:"Jupiter Card",color:PLANET_COLOR.jupiter,planet:true},
+ order:{name:"Override Printout",color:"#67d6c8",desc:()=>`<div class="terminal">AIRLOCK OVERRIDE<br>Enter the four planet code digits<br>in order of DISTANCE FROM THE SUN,<br>closest planet first.</div>`}
+};
+
+/* ---------- Objects & room geometry ---------- */
+const OBJ = [
+ {id:"starchart",name:"Star Chart",rect:[70,18,200,92],ap:[170,165]},
+ {id:"calendar",name:"Moon Log",rect:[300,22,100,84],ap:[350,165]},
+ {id:"door",name:"Airlock Door",rect:[450,10,170,110],ap:[525,165]},
+ {id:"poster",name:"Space Race Poster",rect:[680,16,200,92],ap:[780,165]},
+ {id:"window",name:"Window",rect:[0,190,30,140],ap:[60,330]},
+ {id:"telescope",name:"Telescope",rect:[118,228,84,70],solid:true,ap:[245,262]},
+ {id:"bookshelf",name:"Bookshelf",rect:[905,170,60,220],solid:true,ap:[860,280]},
+ {id:"cabinet",name:"Archive Cabinet",rect:[905,410,60,100],solid:true,ap:[860,460]},
+ {id:"orrery",name:"Orrery",rect:[430,330,140,140],solid:true,ap:[500,510]},
+ {id:"computer",name:"Computer",rect:[380,600,120,80],solid:true,ap:[440,570]},
+ {id:"drawer",name:"Desk Drawer",rect:[500,600,120,80],solid:true,ap:[560,570]},
+ {id:"moonbox",name:"Lunar Lockbox",rect:[90,600,110,80],solid:true,ap:[145,565]},
+ {id:"trash",name:"Wastebasket",rect:[840,620,44,44],solid:true,ap:[800,610]},
+ {id:"plant",name:"Fern",rect:[900,620,50,50],solid:true,ap:[905,585]}
+];
+const OBJ_BY = Object.fromEntries(OBJ.map(o=>[o.id,o]));
+const SOLIDS = OBJ.filter(o=>o.solid);
+const R = 18, SPEED = 230, NEAR = 50;
+const BOUNDS = {x0:30+R,x1:970-R,y0:120+R,y1:700-R};
+
+/* ---------- Helpers ---------- */
+const $ = s=>document.querySelector(s);
+const shuffle = a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
+const esc = s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function fmtTime(ms){const s=Math.floor(ms/1000);const h=Math.floor(s/3600),m=Math.floor(s%3600/60),ss=s%60;return (h?h+":"+String(m).padStart(2,"0"):m)+":"+String(ss).padStart(2,"0")}
+function moonSVG(i,size=72){
+  const r=26,p=i/8;let lit="";
+  if(i===4) lit=`<circle r="${r}" fill="var(--moonlit)"/>`;
+  else if(i!==0){
+    const rx=(Math.abs(Math.cos(2*Math.PI*p))*r).toFixed(2);let d;
+    if(p<.5){const sw=p<.25?0:1;d=`M0,${-r} A${r},${r} 0 0 1 0,${r} A${rx},${r} 0 0 ${sw} 0,${-r}Z`}
+    else{const sw=p<.75?0:1;d=`M0,${-r} A${r},${r} 0 0 0 0,${r} A${rx},${r} 0 0 ${sw} 0,${-r}Z`}
+    lit=`<path d="${d}" fill="var(--moonlit)"/>`;
+  }
+  return `<svg viewBox="-30 -30 60 60" width="${size}" height="${size}" aria-hidden="true"><circle r="${r}" fill="var(--moondark)" stroke="#4a5285" stroke-width="1"/>${lit}</svg>`;
+}
+
+/* ---------- State ---------- */
+const SAVE_KEY="kepler-escape-v2";
+let S=null;
+function newState(team){
+  const picks={},prog={};
+  for(const k in STATIONS){picks[k]=shuffle(QB[STATIONS[k].bank].map((_,i)=>i)).slice(0,2);prog[k]=0}
+  const digits={};PLANET_ORDER.forEach(p=>digits[p]=1+Math.floor(Math.random()*9));
+  const consKeys=Object.keys(CONS);
+  return {v:2,cons:consKeys[Math.floor(Math.random()*consKeys.length)],trailBase:5*Math.floor(Math.random()*72),team,start:Date.now(),inv:[],picks,prog,done:{},unlocked:{},drawerOpen:false,digits,wrong:0,hints:0,escaped:false,end:null,pos:{x:500,y:250}};
+}
+function save(){try{localStorage.setItem(SAVE_KEY,JSON.stringify(S))}catch(e){}}
+function loadSaved(){try{const s=JSON.parse(localStorage.getItem(SAVE_KEY));return s&&s.v===2&&!s.escaped?s:null}catch(e){return null}}
+function clearSave(){try{localStorage.removeItem(SAVE_KEY)}catch(e){}}
+
+/* ---------- HUD / inventory ---------- */
+function renderHUD(){
+  if(!S) return;
+  const t=(S.escaped?S.end:Date.now())-S.start;
+  $("#hTime").textContent=fmtTime(t);
+  $("#hDone").textContent=Object.keys(S.done).length+"/6";
+  $("#hWrong").textContent=S.wrong;
+}
+function renderInv(){
+  const el=$("#inv");
+  if(!S.inv.length){el.innerHTML='<span class="empty">Nothing yet. Search the room.</span>';return}
+  el.innerHTML=S.inv.map(id=>{const it=ITEMS[id];const extra=it.planet?` · <b style="font-family:var(--mono);font-size:18px">${S.digits[id]}</b>`:"";return `<button class="item" data-item="${id}"><span class="dot" style="background:${it.color}"></span>${it.name}${extra}</button>`}).join("");
+}
+function renderBadges(){
+  const pos={starchart:[262,22],telescope:[200,226],orrery:[560,336],moonbox:[196,604],cabinet:[961,414],computer:[490,606]};
+  $("#badges").innerHTML=Object.keys(S.done).map(k=>{const [x,y]=pos[k];return `<g transform="translate(${x} ${y})"><circle r="11" fill="#7fd892" stroke="#0b1024" stroke-width="2"/><path d="M-5 0 L-1 4 L5 -4" fill="none" stroke="#0b1024" stroke-width="2.5" stroke-linecap="round"/></g>`}).join("");
+  const open=S.escaped;
+  $("#doorLight").setAttribute("fill",open?"#7fd892":"#ff5a4a");
+}
+function give(id){
+  if(!S.inv.includes(id)){S.inv.push(id);renderInv();toast("Added to inventory: "+ITEMS[id].name)}
+  save();
+}
+let toastT;
+function toast(msg){const t=$("#toast");t.textContent=msg;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>t.hidden=true,2600)}
+
+/* ---------- Modal ---------- */
+let modalOpen=false, lastFocus=null;
+function openModal(html,{closable=true}={}){
+  const p=$("#panel");
+  p.innerHTML=(closable?'<button class="close" data-act="close" aria-label="Close">×</button>':"")+`<div class="panel-in">${html}</div>`;
+  $("#modal").hidden=false;modalOpen=true;keys.clear();target=null;pending=null;
+  lastFocus=document.activeElement;
+  const f=p.querySelector("input, .opt:not(:disabled), .btn, .dial, .key, .book")||p.querySelector(".close");
+  if(f) setTimeout(()=>f.focus({preventScroll:true}),30);
+}
+function closeModal(){ if(!S) return; $("#modal").hidden=true;modalOpen=false;renderAll(); }
+function renderAll(){renderHUD();renderInv();renderBadges()}
+$("#modal").addEventListener("pointerdown",e=>{if(e.target.id==="modal"&&$("#panel").querySelector(".close")) closeModal()});
+
+/* ---------- Station quiz ---------- */
+let curOpts=null;
+function header(k){const st=STATIONS[k];return `<div class="eyebrow">${st.topic}</div><h2>${st.name}</h2>`}
+function openStation(k){
+  const st=STATIONS[k];
+  if(st.lock&&!S.unlocked[k]) return openLock(k);
+  if(S.done[k]) return openModal(header(k)+`<div class="feedback good">Station complete. You collected the <b>${ITEMS[st.reward].name}</b>.</div>`+rewardBody(st.reward)+`<div class="row"><button class="btn" data-act="close">Back to the room</button></div>`);
+  if(S.prog[k]===0) return openModal(header(k)+`<p>${INTRO[k]}</p><p style="color:var(--muted)">Answer 2 questions, then solve a hands-on puzzle to unlock the reward.</p><div class="row"><button class="btn" data-act="quiz" data-k="${k}">Begin</button></div>`);
+  renderQ(k);
+}
+function pipsHTML(n){return [0,1,2].map(i=>`<span class="pip ${i<n?"on":""}"></span>`).join("")}
+function renderQ(k){
+  if(S.prog[k]>=2) return renderPuzzle(k);
+  const st=STATIONS[k],n=S.prog[k],q=QB[st.bank][S.picks[k][n]];
+  curOpts=shuffle([q.a,...q.w]);
+  const pips=pipsHTML(n);
+  const term=k==="computer";
+  const body=`<div class="row" style="justify-content:space-between"><span class="pips">${pips}</span><span style="color:var(--muted);font-size:14px">Step ${n+1} of 3</span></div>
+   ${q.moon!==undefined?`<div class="moonfig">${moonSVG(q.moon,120)}</div>`:""}
+   <div class="qtext">${esc(q.q)}</div>
+   <div class="opts">${curOpts.map((o,i)=>`<button class="opt" data-act="ans" data-k="${k}" data-i="${i}"><span class="letter">${"ABCD"[i]}</span><span>${esc(o)}</span></button>`).join("")}</div>
+   <div class="keyhelp">Press <kbd>A</kbd> <kbd>B</kbd> <kbd>C</kbd> <kbd>D</kbd> to answer, or use <kbd>↑</kbd> <kbd>↓</kbd> and <kbd>Enter</kbd>.</div>
+   <div id="fb"></div>
+   <div class="row" id="qActions"><button class="btn ghost" data-act="hint" data-k="${k}">Show hint</button></div>`;
+  openModal(header(k)+(term?`<div class="terminal" style="font-size:20px">KNOWLEDGE CHECK ${n+1}/2</div>`:"")+body);
+}
+function answer(k,i,btn){
+  const st=STATIONS[k],q=QB[st.bank][S.picks[k][S.prog[k]]];
+  const choice=curOpts[i];
+  if(choice===q.a){
+    btn.classList.add("right");
+    document.querySelectorAll(".opt").forEach(b=>b.disabled=true);
+    S.prog[k]++;
+    const last=false;
+    $("#fb").innerHTML=`<div class="feedback good"><b>Correct!</b> ${esc(q.why)}</div>`;
+    $("#qActions").innerHTML=`<button class="btn" data-act="next" data-k="${k}">${S.prog[k]>=2?"On to the puzzle":"Next question"}</button>`;
+    $("#qActions .btn").focus();
+    save();
+  } else {
+    btn.classList.add("wrong");btn.disabled=true;
+    S.wrong++;renderHUD();save();
+    const p=$("#panel");p.classList.remove("shake");void p.offsetWidth;p.classList.add("shake");
+    $("#fb").innerHTML=`<div class="feedback bad">Not quite. Try another answer.</div>`;
+    const left=[...document.querySelectorAll(".opt:not(:disabled)")];
+    if(left.length) left[0].focus();
+  }
+}
+function rewardBody(id){
+  const it=ITEMS[id];
+  if(it.planet) return `<div class="cards"><div class="card have" style="border-color:${it.color}">${it.name}<b>${S.digits[id]}</b></div></div><p style="color:var(--muted)">One of four planet code cards. The airlock needs all four.</p>`;
+  return `<div>${it.desc()}</div>`;
+}
+function claim(k){
+  const st=STATIONS[k];S.done[k]=true;give(st.reward);renderBadges();renderHUD();
+  const extra = k==="starchart"?"<p>The tag says DESK. Maybe it opens a drawer.</p>":"";
+  openModal(header(k)+`<div class="feedback good"><b>Station complete!</b> You found: <b>${ITEMS[st.reward].name}</b></div>`+rewardBody(st.reward)+extra+`<div class="row"><button class="btn" data-act="close">Back to the room</button></div>`);
+  if(Object.keys(S.done).length===6) setTimeout(()=>toast("All six stations solved. Head for the airlock!"),800);
+}
+
+/* ---------- Hands-on puzzles ---------- */
+const CONS = {
+ dipper:{name:"the Big Dipper",note:"The Big Dipper is an asterism inside Ursa Major. The two stars at the end of its bowl point to Polaris.",
+  stars:[[12,42],[26,34],[38,35],[50,40],[54,58],[76,60],[80,38]],edges:[[0,1],[1,2],[2,3],[3,4],[4,5],[5,6],[6,3]],
+  extra:[[20,80],[45,15],[65,82],[90,70],[8,15],[66,22],[34,68]]},
+ cassiopeia:{name:"Cassiopeia",note:"Cassiopeia's W sits on the opposite side of Polaris from the Big Dipper, so one is always easy to find.",
+  stars:[[10,38],[28,62],[46,44],[64,66],[84,36]],edges:[[0,1],[1,2],[2,3],[3,4]],
+  extra:[[20,15],[50,18],[78,82],[40,85],[90,60],[12,78],[60,30]]},
+ orion:{name:"Orion",note:"Orion's three belt stars point down and to the left toward Sirius, the brightest star in the night sky.",
+  stars:[[47,8],[28,22],[68,25],[40,52],[48,50],[56,48],[34,86],[72,82]],edges:[[0,1],[0,2],[1,3],[2,5],[3,4],[4,5],[3,6],[5,7],[6,7]],
+  extra:[[12,50],[88,52],[15,10],[86,10],[12,92],[60,68],[88,92]]}
+};
+const TIMELINE=[
+ {id:"e0",h:"SOVIETS LAUNCH FIRST MAN-MADE SATELLITE",s:"\"Sputnik\" beeps from orbit",y:"October 1957"},
+ {id:"e1",h:"CONGRESS CREATES NASA",s:"New agency will lead U.S. space efforts",y:"July 1958"},
+ {id:"e2",h:"RED COSMONAUT CIRCLES THE GLOBE",s:"Gagarin becomes first human in space",y:"April 1961"},
+ {id:"e3",h:"FIRST WOMAN IN SPACE",s:"Tereshkova orbits Earth 48 times",y:"June 1963"},
+ {id:"e4",h:"MEN WALK ON MOON",s:"Armstrong and Aldrin explore the Sea of Tranquility",y:"July 1969"}
+];
+const STARCOLORS=[
+ {id:"c0",name:"Spica",c:"#7fb2ff"},
+ {id:"c1",name:"Sirius",c:"#f2f5ff"},{id:"c2",name:"The Sun",c:"#ffe27a"},{id:"c3",name:"Arcturus",c:"#ffae5c"},{id:"c4",name:"Betelgeuse",c:"#ff6b4f"}
+];
+const PLANETFILES=[
+ ["Mercury","Closest to the Sun. A year there lasts only 88 Earth days."],
+ ["Venus","Spins backward, so the Sun rises in the west."],
+ ["Mars","Red and dusty, home of Olympus Mons, the tallest volcano in the solar system."],
+ ["Jupiter","Has a storm bigger than Earth called the Great Red Spot."],
+ ["Saturn","So low in density that it would float in a (very) giant bathtub."],
+ ["Neptune","The farthest planet from the Sun, with the fastest winds in the solar system."]
+];
+const PZ_TITLE={starchart:"Draw the constellation",telescope:"Star-trail photos",orrery:"Planet files",moonbox:"Phase sequence",cabinet:"Newspaper timeline",computer:"Star temperatures"};
+const PZ_HINT={
+ starchart:"Copy the guide card. Click a star, then the next star in the pattern, and keep going. The faint background stars are not part of it.",
+ telescope:"Seen from the Northern Hemisphere, stars circle Polaris counterclockwise (the opposite way a clock's hands turn) at 15° per hour. In 3 hours they turn 45°.",
+ orrery:"Start with the ones you're sure of. Each planet matches exactly one file.",
+ moonbox:"After new moon, the lit part grows on the RIGHT (waxing) until full. Then it shrinks, leaving the LEFT side lit (waning).",
+ cabinet:"The race began with a satellite. Next came a new U.S. agency, then people in space, and finally the Moon.",
+ computer:"Star colors work like a flame: blue is hottest, then white, yellow, orange, and red is coolest."
+};
+let PZ=null;
+function trailSVG(angle,size=104){
+  const st=[[-10,20],[-13,30],[-25,33],[-27,23],[-38,20],[-48,16],[-57,19]];
+  const ln=[[0,1],[1,2],[2,3],[3,0],[3,4],[4,5],[5,6]];
+  return `<svg viewBox="-62 -62 124 124" width="${size}" height="${size}" aria-hidden="true"><circle r="60" fill="#070c26" stroke="#3d4677"/><g transform="rotate(${angle})"><path d="M-13 30 L-1 -4" stroke="#d4ab52" stroke-dasharray="3 3" opacity=".6"/>${ln.map(([a,b])=>`<line x1="${st[a][0]}" y1="${st[a][1]}" x2="${st[b][0]}" y2="${st[b][1]}" stroke="#9fb3ff" stroke-width="1.5" opacity=".8"/>`).join("")}${st.map(p=>`<circle cx="${p[0]}" cy="${p[1]}" r="2.6" fill="#fff"/>`).join("")}</g><circle r="4" fill="#ffe9a8"/><text y="-8" text-anchor="middle" font-size="9" fill="#d4ab52" font-family="Atkinson Hyperlegible, sans-serif">Polaris</text></svg>`;
+}
+function guideSVG(c){
+  return `<svg viewBox="0 0 100 100" width="120" height="120" style="background:#0b1238;border-radius:8px" aria-hidden="true">${c.edges.map(([a,b])=>`<line x1="${c.stars[a][0]}" y1="${c.stars[a][1]}" x2="${c.stars[b][0]}" y2="${c.stars[b][1]}" stroke="#9fb3ff" stroke-width="2"/>`).join("")}${c.stars.map(p=>`<circle cx="${p[0]}" cy="${p[1]}" r="3" fill="#fff"/>`).join("")}</svg>`;
+}
+function seqState(k,items,answer,labels,opts={}){
+  const slots=answer.map(()=>null),locked=new Set();
+  (opts.fixed||[]).forEach(i=>{slots[i]=answer[i];locked.add(i)});
+  return {type:"seq",k,items,answer,slots,locked,labels,layout:opts.layout||"tiles",poolOrder:shuffle(Object.keys(items))};
+}
+function renderPuzzle(k){
+  let intro="";
+  if(k==="starchart"){
+    const c=CONS[S.cons];
+    intro=`<p>The brass plate slides aside to reveal a blank star field and a note: <b>"Draw ${c.name}."</b> <b>Drag</b> from one star to another to draw a line, or click one star and then the other. Click a line to erase it.</p>`;
+    PZ={type:"draw",k,c,edges:new Set(),bad:new Set(),hist:[],sel:null,stars:shuffle([...c.stars.map((p,i)=>({id:"s"+i,x:p[0],y:p[1],b:1})),...c.extra.map((p,i)=>({id:"x"+i,x:p[0],y:p[1],b:0}))])};
+  } else if(k==="telescope"){
+    const times=["8 PM","11 PM","2 AM","5 AM"],items={};
+    times.forEach((t,i)=>items["t"+i]=trailSVG(S.trailBase-45*i));
+    intro=`<p>Dr. Kepler aimed a camera at Polaris and photographed the Big Dipper every 3 hours, but the photos got shuffled. The 8 PM photo is already in place. Put the rest in order.</p>`;
+    PZ=seqState(k,items,["t0","t1","t2","t3"],times,{fixed:[0]});
+  } else if(k==="orrery"){
+    intro=`<p>Six planet files have fallen out of the orrery's base. Click a planet, then click the file that describes it.</p>`;
+    PZ={type:"match",k,left:PLANETFILES.map((p,i)=>({id:"p"+i,label:p[0]})),right:shuffle(PLANETFILES.map((p,i)=>({id:"p"+i,label:p[1]}))),pairs:{},sel:null,locked:new Set()};
+  } else if(k==="moonbox"){
+    const items={};PHASES.forEach((_,i)=>items["m"+i]=moonSVG(i,56));
+    intro=`<p>The second lid has eight phase slots. The new moon tile is already set. Fill in one full cycle of phases in order, as seen from the Northern Hemisphere.</p>`;
+    PZ=seqState(k,items,PHASES.map((_,i)=>"m"+i),PHASES.map((_,i)=>String(i+1)),{fixed:[0]});
+  } else if(k==="cabinet"){
+    const items={};TIMELINE.forEach(e=>items[e.id]=`<span class="clip"><b>${e.h}</b><span>${e.s}</span></span>`);
+    intro=`<p>Five newspaper clippings, all with the dates torn off. A note on the JUPITER envelope says: <i>"Put the headlines in order, earliest first."</i></p>`;
+    PZ=seqState(k,items,TIMELINE.map(e=>e.id),["1st","2nd","3rd","4th","5th"],{layout:"list"});
+  } else if(k==="computer"){
+    const items={};STARCOLORS.forEach(s=>items[s.id]=`<span class="starglow" style="--c:${s.c}"></span><span>${s.name}</span>`);
+    intro=`<div class="terminal" style="font-size:20px">SPECTROGRAPH OFFLINE.<br>RANK THESE STARS FROM HOTTEST TO COOLEST BY COLOR.</div>`;
+    PZ=seqState(k,items,STARCOLORS.map(s=>s.id),["Hottest","2nd","3rd","4th","Coolest"]);
+  }
+  openModal(header(k)+`<div class="row" style="justify-content:space-between"><span class="pips">${pipsHTML(2)}</span><span style="color:var(--muted);font-size:14px">Step 3 of 3 · Puzzle</span></div><div class="eyebrow" style="color:var(--brass)">${PZ_TITLE[k]}</div>${intro}<div id="pz"></div><div id="fb"></div><div class="row" id="qActions"><button class="btn" data-act="pz-check">Check</button>${k==="starchart"?'<button class="btn ghost" data-act="pz-undo">Undo line</button><button class="btn ghost" data-act="pz-clear">Clear lines</button>':""}<button class="btn ghost" data-act="pz-hint">Hint</button></div>`);
+  drawPZ();
+  setTimeout(()=>{const f=$("#pz button:not(:disabled)");if(f) f.focus({preventScroll:true})},50);
+}
+function drawPZ(){
+  const el=$("#pz");if(!el) return;
+  if(PZ.type==="seq"){
+    const pool=PZ.poolOrder.filter(id=>!PZ.slots.includes(id));
+    const L=PZ.layout==="list"?" list":"";
+    el.innerHTML=`<div class="pz-label">Your order</div><div class="slots${L}" data-group="slots">${PZ.slots.map((id,i)=>`<button class="slot ${PZ.locked.has(i)?"locked":""} ${id?"":"emptyslot"}" data-act="pz-slot" data-i="${i}" ${PZ.locked.has(i)||!id?"disabled":""} aria-label="Position ${PZ.labels[i]}${id?"":" (empty)"}"><span class="slot-n">${PZ.labels[i]}</span>${id?PZ.items[id]:'<span class="slot-empty">empty</span>'}</button>`).join("")}</div>
+    <div class="pz-label">Pieces · click one to put it in the next empty spot</div><div class="pool${L}" data-group="pool">${pool.map(id=>`<button class="piece" data-act="pz-pool" data-id="${id}">${PZ.items[id]}</button>`).join("")||'<span class="empty">All pieces placed. Click Check, or click a placed piece to take it back.</span>'}</div>`;
+  } else if(PZ.type==="match"){
+    const owner=r=>Object.keys(PZ.pairs).find(l=>PZ.pairs[l]===r);
+    el.innerHTML=`<div class="match"><div class="mcol" data-group="left">${PZ.left.map((p,i)=>`<button class="mitem ${PZ.sel===p.id?"sel":""} ${PZ.pairs[p.id]?"paired":""} ${PZ.locked.has(p.id)?"locked":""}" data-act="pz-left" data-id="${p.id}" ${PZ.locked.has(p.id)?"disabled":""}><span class="tag">${i+1}</span>${p.label}</button>`).join("")}</div>
+    <div class="mcol" data-group="right">${PZ.right.map(c=>{const o=owner(c.id),n=o?PZ.left.findIndex(p=>p.id===o)+1:0,lk=o&&PZ.locked.has(o);return `<button class="mitem ${o?"paired":""} ${lk?"locked":""}" data-act="pz-right" data-id="${c.id}" ${lk?"disabled":""}><span class="tag">${n||"·"}</span>${c.label}</button>`}).join("")}</div></div>`;
+  } else if(PZ.type==="draw"){
+    const pos=Object.fromEntries(PZ.stars.map(s=>[s.id,s]));
+    const lines=[...PZ.edges].map(e=>{const [a,b]=e.split("|");const xy=`x1="${pos[a].x}" y1="${pos[a].y}" x2="${pos[b].x}" y2="${pos[b].y}"`;return `<line class="${PZ.bad.has(e)?"bad":""}" ${xy}/><line class="hit" ${xy} data-act="pz-line" data-e="${e}"><title>Click to erase this line</title></line>`}).join("");
+    el.innerHTML=`<div class="drawwrap"><div class="field"><svg viewBox="0 0 100 100" preserveAspectRatio="none">${lines}<line id="pv" class="pv" x1="0" y1="0" x2="0" y2="0" style="display:none"/></svg><div data-group="stars">${PZ.stars.map((s,i)=>`<button class="star ${s.b?"bright":""} ${PZ.sel===s.id?"sel":""}" style="left:${s.x}%;top:${s.y}%" data-act="pz-star" data-id="${s.id}" aria-label="Star ${i+1}${PZ.sel===s.id?" (selected)":""}"></button>`).join("")}</div></div><div class="guide paper"><b>Guide card</b>${guideSVG(PZ.c)}<span style="text-transform:capitalize">${PZ.c.name}</span></div></div><div class="keyhelp" id="drawtip">${PZ.sel?"Now click the star you want to connect it to, or click the glowing star again to let go.":"Lines drawn: "+PZ.edges.size+" of "+PZ.c.edges.length}</div>`;
+    bindDraw();
+  }
+}
+function toggleEdge(a,b){const e=[a,b].sort().join("|");if(PZ.edges.has(e)) PZ.edges.delete(e);else{PZ.edges.add(e);PZ.hist.push(e)}PZ.bad.clear()}
+function bindDraw(){
+  const field=$("#pz .field");if(!field) return;
+  const pv=field.querySelector("#pv");let from=null;
+  const pt=e=>{const r=field.getBoundingClientRect();return [(e.clientX-r.left)/r.width*100,(e.clientY-r.top)/r.height*100]};
+  field.addEventListener("pointerdown",e=>{const s=e.target.closest(".star");if(!s) return;from=s.dataset.id;const st=PZ.stars.find(x=>x.id===from);pv.setAttribute("x1",st.x);pv.setAttribute("y1",st.y);pv.setAttribute("x2",st.x);pv.setAttribute("y2",st.y)});
+  field.addEventListener("pointermove",e=>{if(!from) return;const [x,y]=pt(e);pv.setAttribute("x2",x);pv.setAttribute("y2",y);pv.style.display=""});
+  const end=e=>{
+    if(!from) return;const a=from;from=null;pv.style.display="none";
+    if(e.type!=="pointerup") return;
+    const el=document.elementFromPoint(e.clientX,e.clientY),s=el&&el.closest?el.closest("#pz .star"):null;
+    if(s&&s.dataset.id!==a){toggleEdge(a,s.dataset.id);PZ.sel=null;drawPZ()}
+  };
+  field.addEventListener("pointerup",end);field.addEventListener("pointercancel",end);
+}
+function pzFocus(sel){setTimeout(()=>{const f=$(sel)||$("#pz button:not(:disabled)")||$("[data-act=pz-check]");if(f) f.focus({preventScroll:true})},0)}
+function pzSolved(){
+  const k=PZ.k;S.prog[k]=3;save();
+  const msg={
+    starchart:PZ.c&&PZ.c.note,
+    telescope:"Because Earth rotates, stars near Polaris circle it counterclockwise at 15° per hour. Every 3 hours the Big Dipper turns 45°.",
+    orrery:"All six planet files are back where they belong. Saturn really is less dense than water!",
+    moonbox:"New → waxing crescent → first quarter → waxing gibbous → full → waning gibbous → third quarter → waning crescent. One cycle takes about 29.5 days.",
+    cabinet:"Sputnik 1 (1957) → NASA founded (1958) → Gagarin (1961) → Tereshkova (1963) → Apollo 11 (1969).",
+    computer:"Spica (about 22,000 K) → Sirius (about 9,900 K) → the Sun (about 5,800 K) → Arcturus (about 4,300 K) → Betelgeuse (about 3,500 K)."
+  }[k];
+  document.querySelectorAll("#pz button").forEach(b=>b.disabled=true);
+  document.querySelectorAll(".pips .pip").forEach(p=>p.classList.add("on"));
+  $("#fb").innerHTML=`<div class="feedback good"><b>Solved!</b> ${msg}</div>`;
+  $("#qActions").innerHTML=`<button class="btn" data-act="reward" data-k="${k}">Claim reward</button>`;
+  $("#qActions .btn").focus();
+}
+function pzMistake(msg){
+  S.wrong++;renderHUD();save();
+  $("#fb").innerHTML=`<div class="feedback bad">${msg}</div>`;
+  const p=$("#panel");p.classList.remove("shake");void p.offsetWidth;p.classList.add("shake");
+}
+function pzAction(a,b){
+  if(!PZ) return;
+  const fb=$("#fb");
+  if(a==="pz-hint"){S.hints++;save();fb.innerHTML=`<div class="feedback info"><b>Hint:</b> ${PZ_HINT[PZ.k]}</div>`;return}
+  if(a==="pz-clear"){PZ.edges.clear();PZ.bad.clear();PZ.hist=[];PZ.sel=null;drawPZ();return}
+  if(a==="pz-undo"){while(PZ.hist.length){const e=PZ.hist.pop();if(PZ.edges.has(e)){PZ.edges.delete(e);break}}PZ.bad.clear();PZ.sel=null;drawPZ();return}
+  if(a==="pz-line"){PZ.edges.delete(b.dataset.e);PZ.bad.clear();PZ.sel=null;drawPZ();return}
+  if(a==="pz-pool"){
+    const i=PZ.slots.indexOf(null);if(i<0) return;
+    PZ.slots[i]=b.dataset.id;drawPZ();
+    pzFocus(PZ.slots.includes(null)?"#pz .pool button":"[data-act=pz-check]");return;
+  }
+  if(a==="pz-slot"){const i=+b.dataset.i;const id=PZ.slots[i];PZ.slots[i]=null;drawPZ();pzFocus(`#pz [data-act=pz-pool][data-id="${id}"]`);return}
+  if(a==="pz-star"){
+    const id=b.dataset.id;PZ.bad.clear();
+    if(!PZ.sel) PZ.sel=id;
+    else if(PZ.sel===id) PZ.sel=null;
+    else{toggleEdge(PZ.sel,id);PZ.sel=null}
+    drawPZ();pzFocus(`#pz [data-id="${id}"]`);return;
+  }
+  if(a==="pz-left"){const id=b.dataset.id;if(PZ.locked.has(id)) return;delete PZ.pairs[id];PZ.sel=PZ.sel===id?null:id;drawPZ();pzFocus(`#pz [data-act=pz-right]:not(:disabled)`);return}
+  if(a==="pz-right"){
+    const id=b.dataset.id,o=Object.keys(PZ.pairs).find(l=>PZ.pairs[l]===id);
+    if(!PZ.sel){ if(o){delete PZ.pairs[o];drawPZ();pzFocus(`#pz [data-act=pz-left][data-id="${o}"]`)} else fb.innerHTML=`<div class="feedback info">Click a planet on the left first.</div>`; return }
+    if(o) delete PZ.pairs[o];
+    PZ.pairs[PZ.sel]=id;PZ.sel=null;drawPZ();
+    const next=PZ.left.find(p=>!PZ.pairs[p.id]);pzFocus(next?`#pz [data-act=pz-left][data-id="${next.id}"]`:"[data-act=pz-check]");return;
+  }
+  if(a==="pz-check"){
+    if(PZ.type==="seq"){
+      if(PZ.slots.includes(null)){fb.innerHTML=`<div class="feedback info">Fill every spot before checking.</div>`;return}
+      let right=0;PZ.slots.forEach((id,i)=>{if(id===PZ.answer[i]){PZ.locked.add(i);right++}else PZ.slots[i]=null});
+      drawPZ();
+      if(right===PZ.answer.length) return pzSolved();
+      const fixed=PZ.k==="telescope"||PZ.k==="moonbox"?1:0;
+      pzMistake(`${right-fixed} of ${PZ.answer.length-fixed} pieces were in the right spot. Those are locked in green. The rest went back to the pile.`);
+      pzFocus("#pz .pool button");return;
+    }
+    if(PZ.type==="match"){
+      if(PZ.left.some(p=>!PZ.pairs[p.id])){fb.innerHTML=`<div class="feedback info">Match every planet before checking.</div>`;return}
+      let right=0;PZ.left.forEach(p=>{if(PZ.pairs[p.id]===p.id){PZ.locked.add(p.id);right++}else delete PZ.pairs[p.id]});
+      drawPZ();
+      if(right===PZ.left.length) return pzSolved();
+      pzMistake(`${right} of ${PZ.left.length} matches were correct. Those are locked in green. Try the rest again.`);
+      pzFocus("#pz [data-act=pz-left]:not(:disabled)");return;
+    }
+    if(PZ.type==="draw"){
+      const req=new Set(PZ.c.edges.map(([a,b])=>["s"+a,"s"+b].sort().join("|")));
+      if(!PZ.edges.size){fb.innerHTML=`<div class="feedback info">Draw some lines first: click a star, then another star.</div>`;return}
+      let hit=0;PZ.bad=new Set();PZ.edges.forEach(e=>req.has(e)?hit++:PZ.bad.add(e));
+      if(hit===req.size&&!PZ.bad.size){drawPZ();return pzSolved()}
+      PZ.sel=null;drawPZ();
+      const n=PZ.bad.size;
+      pzMistake(`${hit} of ${req.size} lines are correct.${n?` ${n} line${n>1?"s don't":" doesn't"} belong (shown dashed in red).`:""}${hit<req.size?` ${req.size-hit} line${req.size-hit>1?"s are":" is"} still missing.`:""}`);
+      return;
+    }
+  }
+}
+
+/* ---------- Locks ---------- */
+let lockVal=null;
+function openLock(k){
+  if(k==="cabinet"){
+    lockVal=lockVal&&lockVal.k==="cabinet"?lockVal:{k,v:[0,0,0,0]};
+    openModal(`<div class="eyebrow">Locked</div><h2>Archive Cabinet</h2><p>The drawer has a 4-digit combination dial. Scratched into the metal: <i>"Year it all began."</i></p>
+    <div class="wheels">${lockVal.v.map((d,i)=>`<div class="wheel"><button data-act="wheel" data-i="${i}" data-d="1" aria-label="Digit ${i+1} up">▲</button><output id="w${i}">${d}</output><button data-act="wheel" data-i="${i}" data-d="-1" aria-label="Digit ${i+1} down">▼</button></div>`).join("")}</div>
+    <div id="fb"></div><div class="row"><button class="btn" data-act="tryyear">Try combination</button><button class="btn ghost" data-act="lockhint" data-k="cabinet">Hint</button></div>`);
+  } else if(k==="computer"){
+    openModal(`<div class="eyebrow">Locked</div><h2>Observatory Terminal</h2><div class="terminal"><div>KEPLER OBSERVATORY NETWORK</div><div>USER: DR_KEPLER</div><label for="pw">PASSWORD:</label><input id="pw" autocomplete="off" spellcheck="false" maxlength="20"><div id="fb"></div></div><div class="row"><button class="btn" data-act="trypw">Log in</button><button class="btn ghost" data-act="lockhint" data-k="computer">Hint</button></div>`);
+    $("#pw").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();tryPw()}});
+  } else if(k==="moonbox"){
+    lockVal=lockVal&&lockVal.k==="moonbox"?lockVal:{k,v:[0,0,0,0]};
+    openModal(`<div class="eyebrow">Locked</div><h2>Lunar Lockbox</h2><p>Four brass dials, each showing a Moon phase. Click a dial to turn it. Engraved on the lid: <i>"Set the dials to the four nights in the Moon Log."</i></p>
+    <div class="dials">${lockVal.v.map((v,i)=>`<button class="dial" data-act="dial" data-i="${i}" aria-label="Dial ${i+1}: ${PHASES[v]}">${moonSVG(v,64)}<span>Dial ${i+1}</span></button>`).join("")}</div>
+    <div id="fb"></div><div class="row"><button class="btn" data-act="trymoon">Open lockbox</button><button class="btn ghost" data-act="lockhint" data-k="moonbox">Hint</button></div>`);
+  }
+}
+const LOCK_HINT={
+ cabinet:"Look at the Space Race poster, then check the bookshelf. The first artificial satellite launched in October of this year.",
+ computer:"Open the desk drawer (you need a key from the Star Chart). The note inside points you to a book on the bookshelf.",
+ moonbox:"The Moon Log on the wall lists four nights a week apart. About 7 days pass between each main phase. The Lunar Almanac on the bookshelf shows what each phase looks like."
+};
+function lockFail(msg){S.wrong++;renderHUD();save();$("#fb").innerHTML=`<div class="feedback bad">${msg}</div>`;const p=$("#panel");p.classList.remove("shake");void p.offsetWidth;p.classList.add("shake")}
+function unlock(k){S.unlocked[k]=true;lockVal=null;save();toast(STATIONS[k].name+" unlocked!");openStation(k)}
+function tryPw(){const v=$("#pw").value.trim().toLowerCase();if(v==="laika") unlock("computer"); else lockFail("ACCESS DENIED. Incorrect password.")}
+
+/* ---------- Other objects ---------- */
+const BOOKS=[
+ {id:"animals",title:"Animals in Space",color:"#3b6e8f",body:`<h3>Animals in Space</h3><p>Before people flew into space, animals went first. In <b>November 1957</b>, just one month after <b>Sputnik 1</b> became the first artificial satellite, the Soviet Union launched <b>Sputnik 2</b>.</p><p>On board was <b>Laika</b>, a small dog found on the streets of Moscow. She became the first animal to orbit Earth.</p><p>In 1961, a chimpanzee named Ham flew for NASA, a few months before Yuri Gagarin became the first human in space.</p>`},
+ {id:"almanac",title:"The Lunar Almanac",color:"#6a4c8f",body:()=>`<h3>The Lunar Almanac</h3><p>The Moon passes through all its phases in about <b>29.5 days</b>. A new main phase (new, first quarter, full, third quarter) arrives roughly every <b>7.4 days</b>.</p><div class="phases" style="background:#0b1024;color:#ebe8f7;border-radius:8px;padding:10px">${PHASES.map((n,i)=>`<div>${moonSVG(i,48)}<span>${n}</span></div>`).join("")}</div><p style="font-size:14px">Shown as seen from the Northern Hemisphere.</p>`},
+ {id:"planets",title:"Planets in Order",color:"#a8452f",body:`<h3>Planets in Order</h3><p>Average distance from the Sun, in astronomical units (1 AU = Earth's distance from the Sun):</p><table class="planets"><tr><th>Planet</th><th>Distance (AU)</th></tr><tr><td>Mercury</td><td>0.39</td></tr><tr><td>Venus</td><td>0.72</td></tr><tr><td>Earth</td><td>1.00</td></tr><tr><td>Mars</td><td>1.52</td></tr><tr><td>Jupiter</td><td>5.20</td></tr><tr><td>Saturn</td><td>9.54</td></tr><tr><td>Uranus</td><td>19.2</td></tr><tr><td>Neptune</td><td>30.1</td></tr></table>`},
+ {id:"jokes",title:"Astronomy Jokes",color:"#4f7a49",body:`<h3>Astronomy Jokes, Vol. 1</h3><p>How do you organize a space party? You <b>planet</b>.</p><p>Why did the cow go to space? To see the <b>moooon</b>.</p><p>What holds the Moon up? <b>Moonbeams.</b></p><p class="hand">Someone wrote in the margin: "Please stop."</p>`}
+];
+function openBookshelf(){
+  openModal(`<div class="eyebrow">Library</div><h2>Bookshelf</h2><p>Most of the books are dusty star atlases. A few look recently read.</p><div class="books">${BOOKS.map(b=>`<button class="book" style="background:${b.color}" data-act="book" data-b="${b.id}">${b.title}</button>`).join("")}</div>`);
+}
+function openBook(id){
+  const b=BOOKS.find(x=>x.id===id);const body=typeof b.body==="function"?b.body():b.body;
+  openModal(`<div class="eyebrow">Library</div><div class="paper">${body}</div><div class="row"><button class="btn ghost" data-act="shelf">Back to bookshelf</button><button class="btn" data-act="close">Close</button></div>`);
+}
+function openDoorPanel(){
+  const show=["mars","venus","jupiter","earth"];
+  doorCode="";
+  openModal(`<div class="eyebrow">Exit</div><h2>Airlock Door</h2><p>The keypad needs a 4-digit override code. A label reads: <i>"Planet codes only. Order matters."</i></p>
+  <div class="cards">${show.map(p=>{const have=S.inv.includes(p);return `<div class="card ${have?"have":""}" ${have?`style="border-color:${PLANET_COLOR[p]}"`:""}>${ITEMS[p].name}<b>${have?S.digits[p]:"?"}</b></div>`}).join("")}</div>
+  <div class="screen" id="scr">____</div>
+  <div class="keypad">${[1,2,3,4,5,6,7,8,9].map(n=>`<button class="key" data-act="key" data-n="${n}">${n}</button>`).join("")}<button class="key" data-act="key" data-n="C" aria-label="Clear">C</button><button class="key" data-act="key" data-n="0">0</button><button class="key enter" data-act="key" data-n="E" aria-label="Enter">OK</button></div>
+  <div id="fb"></div><div class="row"><button class="btn ghost" data-act="doorhint">Hint</button></div>`);
+}
+let doorCode="";
+function pressKey(n){
+  const scr=$("#scr");scr.classList.remove("denied");
+  if(n==="C"){doorCode=""}
+  else if(n==="E"){
+    if(doorCode.length<4){$("#fb").innerHTML=`<div class="feedback info">Enter all four digits first.</div>`;return}
+    const code=PLANET_ORDER.map(p=>S.digits[p]).join("");
+    if(doorCode===code&&PLANET_ORDER.every(p=>S.inv.includes(p))){return escape()}
+    S.wrong++;renderHUD();save();scr.textContent="DENIED";scr.classList.add("denied");doorCode="";
+    $("#fb").innerHTML=`<div class="feedback bad">Access denied. Check your planet cards and their order.</div>`;return;
+  } else if(doorCode.length<4) doorCode+=n;
+  scr.textContent=(doorCode+"____").slice(0,4);
+}
+function doorHint(){
+  S.hints++;save();
+  const have=PLANET_ORDER.filter(p=>S.inv.includes(p)).length;
+  let h;
+  if(have<4) h=`You have ${have} of 4 planet cards. Each one is hidden in a puzzle station around the room.`;
+  else if(!S.inv.includes("order")) h="You have all four cards. The Observatory Terminal on the desk knows what order they go in.";
+  else h="Put the digits in order of the planets' distance from the Sun. The \"Planets in Order\" book on the bookshelf can help.";
+  $("#fb").innerHTML=`<div class="feedback info">${h}</div>`;
+}
+function interact(id){
+  if(STATIONS[id]) return openStation(id);
+  switch(id){
+   case "door": return openDoorPanel();
+   case "bookshelf": return openBookshelf();
+   case "calendar": return openModal(`<div class="eyebrow">Wall</div><h2>Moon Log</h2><div class="paper"><h3>Moon Observation Log</h3><div class="row" style="gap:14px"><div style="text-align:center">${moonSVG(0,56)}<div><b>Day 1</b><br>New moon</div></div><div style="text-align:center;font-size:40px;line-height:56px">?<div style="font-size:16px;line-height:1.4"><b>Day 8</b></div></div><div style="text-align:center;font-size:40px;line-height:56px">?<div style="font-size:16px;line-height:1.4"><b>Day 15</b></div></div><div style="text-align:center;font-size:40px;line-height:56px">?<div style="font-size:16px;line-height:1.4"><b>Day 22</b></div></div></div><p class="hand">Clouds every night after Day 1, so I never got my sketches. I set the lockbox dials to all four of these nights, in order. — Dr. K</p></div>`);
+   case "poster": return openModal(`<div class="eyebrow">Wall</div><h2>Space Race Poster</h2><div class="paper" style="background:#1b2f5e;color:#f1e6c8"><h3 style="color:#f1e6c8">THE SPACE RACE</h3><p>• <b>Oct 4, 19<span style="background:#c9483b;padding:0 6px;border-radius:3px">??</span></b> · Sputnik 1, the first artificial satellite, beeps from orbit.</p><p>• <b>1961</b> · The first human reaches space.</p><p>• <b>1969</b> · Apollo 11 lands on the Moon.</p><p class="hand" style="color:#e9b8b0">Torn corner, scribbled in pen: "The archive cabinet code is the year the race began."</p></div>`);
+   case "window": return openModal(`<div class="eyebrow">Window</div><h2>The Night Sky</h2><svg viewBox="0 0 400 200" style="width:100%;background:#070c26;border-radius:10px" aria-label="Big Dipper with pointer stars leading to Polaris"><g stroke="#9fb3ff" stroke-width="1.2" opacity=".7" fill="none"><path d="M60 150 L105 140 L140 150 L170 132 L178 98 L232 92 L232 128 L170 132"/><path d="M232 92 L262 40" stroke-dasharray="4 5"/></g><g fill="#fff"><circle cx="60" cy="150" r="3"/><circle cx="105" cy="140" r="3"/><circle cx="140" cy="150" r="3"/><circle cx="170" cy="132" r="2.6"/><circle cx="178" cy="98" r="3"/><circle cx="232" cy="92" r="3.2"/><circle cx="232" cy="128" r="3"/><circle cx="268" cy="30" r="4.2"/><circle cx="330" cy="70" r="1.2"/><circle cx="30" cy="40" r="1.4"/><circle cx="360" cy="160" r="1.2"/><circle cx="300" cy="120" r="1"/></g><text x="276" y="26" fill="#d4ab52" font-size="13" font-family="Atkinson Hyperlegible, sans-serif">Polaris</text></svg><p>The Big Dipper hangs low over the hills. Following its two "pointer stars" leads straight to Polaris. Hours from now, the whole sky will have turned around that one star.</p>`);
+   case "drawer":
+     if(S.drawerOpen) return openModal(`<div class="eyebrow">Desk</div><h2>Desk Drawer</h2><p>The drawer is open and empty now, apart from a few pencil stubs and a dried-up highlighter.</p>`);
+     if(!S.inv.includes("key")) return openModal(`<div class="eyebrow">Desk</div><h2>Desk Drawer</h2><p>Locked. There's a small brass keyhole. The desk lamp lights up a sticky note on the desktop: <i>"Key's on the star chart, where it belongs."</i></p>`);
+     S.drawerOpen=true;give("note");save();
+     return openModal(`<div class="eyebrow">Desk</div><h2>Desk Drawer</h2><div class="feedback good">The brass key turns. The drawer slides open.</div>${ITEMS.note.desc()}`);
+   case "trash": return openModal(`<div class="eyebrow">Search</div><h2>Wastebasket</h2><p>You un-crumple a piece of scrap paper:</p><div class="paper"><p class="hand">New moon → first quarter → full → third quarter → new again. About a week each. Why is that so hard to remember??</p></div>`);
+   case "plant": return openModal(`<div class="eyebrow">Search</div><h2>Fern</h2><p>A very thirsty fern. Tucked under the pot is a faded sticky note:</p><div class="paper"><p class="hand">Exit checklist: 4 planet cards + the order from the terminal. Don't lose them!</p></div>`);
+  }
+}
+
+/* ---------- Escape ---------- */
+function escape(){
+  S.escaped=true;S.end=Date.now();clearSave();renderAll();
+  $("#doorL").setAttribute("x","452");$("#doorL").setAttribute("width","10");$("#doorR").setAttribute("x","558");$("#doorR").setAttribute("width","10");
+  showEnd();
+}
+function showEnd(){
+  const t=S.end-S.start;
+  openModal(`<div class="eyebrow">Mission complete</div><h1>Airlock open!</h1><p>${S.team?`<b>${esc(S.team)}</b> escaped`:"You escaped"} Kepler Observatory just before dawn.</p>
+  <div class="stats"><div><b>${fmtTime(t)}</b><span>Time</span></div><div><b>${S.wrong}</b><span>Mistakes</span></div><div><b>${S.hints}</b><span>Hints</span></div></div>
+  <p style="color:var(--muted);font-size:14px">Completed ${new Date(S.end).toLocaleString()}. Show this screen to your teacher.</p>
+  <div class="row"><button class="btn" data-act="restart">Play again (new questions)</button></div>`,{closable:false});
+}
+
+/* ---------- Title / help ---------- */
+function showTitle(){
+  const saved=loadSaved();
+  openModal(`<div class="eyebrow">An astronomy escape room</div><h1>Kepler Observatory Escape</h1>
+  <p>At midnight a power surge sealed the observatory's airlock. Dr. Kepler left behind a trail of puzzles that hold the four <b>planet code cards</b> needed to open it.</p>
+  <p>Explore the room, read every clue, answer the astronomy questions, and crack the combinations to get out.</p>
+  <div class="controls"><div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or arrow keys: walk</div><div><kbd>E</kbd> or <kbd>Space</kbd>: inspect what you're standing next to</div><div>Or tap the floor to walk, and tap any object to go inspect it.</div></div>
+  <label class="fld" for="team">Team or player name<input id="team" maxlength="40" placeholder="e.g. Team Nebula"></label>
+  <div class="row"><button class="btn" data-act="start">Start mission</button>${saved?`<button class="btn ghost" data-act="resume">Resume saved game (${fmtTime(Date.now()-saved.start)})</button>`:""}</div>`,{closable:false});
+  $("#team").addEventListener("keydown",e=>{if(e.key==="Enter") startGame()});
+}
+function startGame(){const team=($("#team")?.value||"").trim();S=newState(team);lockVal=null;placePlayer();save();renderAll();$("#modal").hidden=true;modalOpen=false;toast("Mission started. Search the room!")}
+function showHelp(){
+  const have=PLANET_ORDER.filter(p=>S.inv.includes(p)).length;
+  openModal(`<div class="eyebrow">Mission briefing</div><h2>Escape the observatory</h2><p>Find all four planet code cards (${have}/4 found) and learn the order to enter them on the airlock keypad.</p>
+  <div class="controls"><div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / arrows: walk · <kbd>E</kbd> / <kbd>Space</kbd>: inspect</div><div>Tap the floor to walk, tap an object to inspect it.</div><div>Every wrong answer and wrong combination counts as a mistake.</div></div>
+  <div class="row"><button class="btn" data-act="close">Back to the room</button><button class="btn ghost" data-act="confirmRestart">Restart game</button></div>`);
+}
+
+/* ---------- Click routing in dialogs ---------- */
+$("#panel").addEventListener("click",e=>{
+  const b=e.target.closest("[data-act]");if(!b) return;
+  const a=b.dataset.act,k=b.dataset.k;
+  if(a==="close") return closeModal();
+  if(a==="start") return startGame();
+  if(a==="resume"){S=loadSaved();placePlayer();renderAll();$("#modal").hidden=true;modalOpen=false;return}
+  if(a==="restart"){clearSave();resetDoor();return showTitle()}
+  if(a==="confirmRestart"){return openModal(`<h2>Restart the game?</h2><p>All progress will be lost, and you'll get new questions and new planet codes.</p><div class="row"><button class="btn" data-act="restart">Yes, restart</button><button class="btn ghost" data-act="close">Cancel</button></div>`)}
+  if(a==="quiz"||a==="next") return renderQ(k);
+  if(a==="ans") return answer(k,+b.dataset.i,b);
+  if(a==="reward") return claim(k);
+  if(a.startsWith("pz-")) return pzAction(a,b);
+  if(a==="hint"){const st=STATIONS[k],q=QB[st.bank][S.picks[k][S.prog[k]]];S.hints++;save();b.disabled=true;b.textContent="Hint used";const h=document.createElement("div");h.className="feedback info";h.innerHTML="<b>Hint:</b> "+esc(q.hint);$("#fb").before(h);return}
+  if(a==="lockhint"){S.hints++;save();$("#fb").innerHTML=`<div class="feedback info"><b>Hint:</b> ${LOCK_HINT[k]}</div>`;return}
+  if(a==="wheel"){const i=+b.dataset.i;lockVal.v[i]=(lockVal.v[i]+ +b.dataset.d+10)%10;$("#w"+i).textContent=lockVal.v[i];return}
+  if(a==="tryyear"){return lockVal.v.join("")==="1957"?unlock("cabinet"):lockFail("The drawer won't budge. Wrong year.")}
+  if(a==="trypw") return tryPw();
+  if(a==="dial"){const i=+b.dataset.i;lockVal.v[i]=(lockVal.v[i]+1)%8;b.innerHTML=`${moonSVG(lockVal.v[i],64)}<span>Dial ${i+1}</span>`;b.setAttribute("aria-label",`Dial ${i+1}: ${PHASES[lockVal.v[i]]}`);return}
+  if(a==="trymoon"){return lockVal.v.join("")==="0246"?unlock("moonbox"):lockFail("Click. The lid stays shut. Check the Moon Log again.")}
+  if(a==="book") return openBook(b.dataset.b);
+  if(a==="shelf") return openBookshelf();
+  if(a==="key") return pressKey(b.dataset.n);
+  if(a==="doorhint") return doorHint();
+});
+$("#inv").addEventListener("click",e=>{
+  const b=e.target.closest("[data-item]");if(!b) return;const id=b.dataset.item,it=ITEMS[id];
+  openModal(`<div class="eyebrow">Inventory</div><h2>${it.name}</h2>${it.planet?rewardBody(id):`<div>${it.desc()}</div>`}<div class="row"><button class="btn" data-act="close">Close</button></div>`);
+});
+$("#helpBtn").addEventListener("click",()=>{if(S&&!S.escaped&&!modalOpen) showHelp()});
+function resetDoor(){$("#doorL").setAttribute("x","458");$("#doorL").setAttribute("width","52");$("#doorR").setAttribute("x","510");$("#doorR").setAttribute("width","52")}
+
+/* ---------- Movement ---------- */
+const keys=new Set();let target=null,pending=null,route=[],stuck=0,facing=0;
+const player=$("#player"),playerRot=$("#playerRot"),svg=$("#room");
+function placePlayer(){player.setAttribute("transform",`translate(${S.pos.x} ${S.pos.y})`)}
+function hitsSolid(x,y){
+  if(x<BOUNDS.x0||x>BOUNDS.x1||y<BOUNDS.y0||y>BOUNDS.y1) return true;
+  for(const o of SOLIDS){const [rx,ry,rw,rh]=o.rect;const cx=Math.max(rx,Math.min(x,rx+rw)),cy=Math.max(ry,Math.min(y,ry+rh));if((x-cx)**2+(y-cy)**2<R*R) return true}
+  return false;
+}
+function distTo(o,x,y){const [rx,ry,rw,rh]=o.rect;const cx=Math.max(rx,Math.min(x,rx+rw)),cy=Math.max(ry,Math.min(y,ry+rh));return Math.hypot(x-cx,y-cy)}
+function nearest(){let best=null,bd=NEAR;for(const o of OBJ){const d=distTo(o,S.pos.x,S.pos.y);if(d<bd){bd=d;best=o}}return best}
+function segHits(x1,y1,x2,y2,r){ // Liang-Barsky against rect r=[x,y,w,h]
+  let t0=0,t1=1;const dx=x2-x1,dy=y2-y1;
+  const p=[-dx,dx,-dy,dy],q=[x1-r[0],r[0]+r[2]-x1,y1-r[1],r[1]+r[3]-y1];
+  for(let i=0;i<4;i++){if(p[i]===0){if(q[i]<0) return false}else{const t=q[i]/p[i];if(p[i]<0){if(t>t1) return false;if(t>t0) t0=t}else{if(t<t0) return false;if(t<t1) t1=t}}}
+  return true;
+}
+function planRoute(tx,ty){
+  const pad=R+6,{x,y}=S.pos;
+  for(const o of SOLIDS){
+    const r=[o.rect[0]-pad,o.rect[1]-pad,o.rect[2]+2*pad,o.rect[3]+2*pad];
+    if(!segHits(x,y,tx,ty,[r[0]+2,r[1]+2,r[2]-4,r[3]-4])) continue;
+    const c=[[r[0],r[1]],[r[0]+r[2],r[1]],[r[0]+r[2],r[1]+r[3]],[r[0],r[1]+r[3]]].filter(([cx,cy])=>!hitsSolid(cx,cy));
+    const inner=[r[0]+3,r[1]+3,r[2]-6,r[3]-6];
+    let best=null,bl=1e9;
+    for(const a of c){if(!segHits(x,y,a[0],a[1],inner)&&!segHits(a[0],a[1],tx,ty,inner)){const l=Math.hypot(a[0]-x,a[1]-y)+Math.hypot(tx-a[0],ty-a[1]);if(l<bl){bl=l;best=[a]}}}
+    if(!best){for(const a of c)for(const b of c){if(a===b) continue;if(!segHits(x,y,a[0],a[1],inner)&&!segHits(a[0],a[1],b[0],b[1],inner)&&!segHits(b[0],b[1],tx,ty,inner)){const l=Math.hypot(a[0]-x,a[1]-y)+Math.hypot(b[0]-a[0],b[1]-a[1])+Math.hypot(tx-b[0],ty-b[1]);if(l<bl){bl=l;best=[a,b]}}}}
+    if(best) return [...best,[tx,ty]];
+  }
+  return [[tx,ty]];
+}
+function walkTo(tx,ty,obj){
+  route=planRoute(tx,ty);target=route.shift();pending=obj||null;stuck=0;
+  const m=$("#marker");m.setAttribute("cx",tx);m.setAttribute("cy",ty);m.setAttribute("opacity",".9");
+}
+function svgPoint(e){const pt=svg.createSVGPoint();pt.x=e.clientX;pt.y=e.clientY;return pt.matrixTransform(svg.getScreenCTM().inverse())}
+svg.addEventListener("pointerdown",e=>{
+  if(modalOpen||!S||S.escaped) return;
+  const g=e.target.closest("[data-obj]");
+  if(g){const o=OBJ_BY[g.dataset.obj];if(distTo(o,S.pos.x,S.pos.y)<NEAR) return interact(o.id);return walkTo(o.ap[0],o.ap[1],o.id)}
+  const p=svgPoint(e);walkTo(p.x,p.y,null);
+});
+window.addEventListener("keydown",e=>{
+  if(modalOpen){
+    if(e.key==="Escape"&&$("#panel .close")) return closeModal();
+    const opts=[...document.querySelectorAll("#panel .opt")];
+    const kk=e.key.toLowerCase();
+    const grp=document.activeElement&&document.activeElement.closest?document.activeElement.closest("#panel [data-group]"):null;
+    if(grp&&kk.startsWith("arrow")){const bs=[...grp.querySelectorAll("button:not(:disabled)")];const gi=bs.indexOf(document.activeElement);if(gi>=0){e.preventDefault();const d=(kk==="arrowright"||kk==="arrowdown")?1:-1;bs[(gi+d+bs.length)%bs.length].focus()}return}
+    if(!opts.length||e.target.matches("input,textarea")) return;
+    const k=e.key.toLowerCase(), li="abcd".indexOf(k), ni="1234".indexOf(k), idx=li>=0?li:ni;
+    if(idx>=0&&opts[idx]){ e.preventDefault(); if(!opts[idx].disabled) opts[idx].click(); return }
+    if(k==="arrowdown"||k==="arrowup"){
+      const live=opts.filter(o=>!o.disabled); if(!live.length) return;
+      e.preventDefault();
+      const cur=live.indexOf(document.activeElement);
+      const next=cur<0?(k==="arrowdown"?0:live.length-1):(cur+(k==="arrowdown"?1:-1)+live.length)%live.length;
+      live[next].focus();
+    }
+    return;
+  }
+  if(!S) return;
+  const k=e.key.toLowerCase();
+  if(["arrowup","arrowdown","arrowleft","arrowright","w","a","s","d"].includes(k)){keys.add(k);target=null;pending=null;route=[];$("#marker").setAttribute("opacity","0");e.preventDefault()}
+  if(k==="e"||k===" "||k==="enter"){const n=nearest();if(n){e.preventDefault();interact(n.id)}}
+});
+window.addEventListener("keyup",e=>keys.delete(e.key.toLowerCase()));
+window.addEventListener("blur",()=>keys.clear());
+
+let last=performance.now(),nearId=null,saveT=0;
+function tick(now){
+  const dt=Math.min(.05,(now-last)/1000);last=now;
+  if(S&&!modalOpen&&!S.escaped){
+    let dx=0,dy=0;
+    if(keys.has("arrowleft")||keys.has("a")) dx-=1;
+    if(keys.has("arrowright")||keys.has("d")) dx+=1;
+    if(keys.has("arrowup")||keys.has("w")) dy-=1;
+    if(keys.has("arrowdown")||keys.has("s")) dy+=1;
+    if(!dx&&!dy&&target){
+      const tx=target[0]-S.pos.x,ty=target[1]-S.pos.y,d=Math.hypot(tx,ty);
+      if(d<4){
+        if(route.length){target=route.shift()}
+        else{target=null;$("#marker").setAttribute("opacity","0");if(pending){const id=pending;pending=null;if(distTo(OBJ_BY[id],S.pos.x,S.pos.y)<NEAR+20) interact(id)}}
+      } else {dx=tx/d;dy=ty/d}
+    }
+    const len=Math.hypot(dx,dy);
+    if(len){
+      dx/=len;dy/=len;facing=Math.atan2(dy,dx)*180/Math.PI;
+      const step=SPEED*dt,ox=S.pos.x,oy=S.pos.y;
+      const nx=S.pos.x+dx*step;if(!hitsSolid(nx,S.pos.y)) S.pos.x=nx;
+      const ny=S.pos.y+dy*step;if(!hitsSolid(S.pos.x,ny)) S.pos.y=ny;
+      const moved=Math.hypot(S.pos.x-ox,S.pos.y-oy);
+      if(target){ if(moved<step*.3){stuck+=dt;if(stuck>.4){target=null;route=[];$("#marker").setAttribute("opacity","0");if(pending&&distTo(OBJ_BY[pending],S.pos.x,S.pos.y)<NEAR+30){const id=pending;pending=null;interact(id)}else pending=null}} else stuck=0 }
+      placePlayer();playerRot.setAttribute("transform",`rotate(${facing.toFixed(1)})`);
+      saveT+=dt;if(saveT>2){saveT=0;save()}
+    }
+    const n=nearest();const id=n?n.id:null;
+    if(id!==nearId){
+      document.querySelectorAll(".obj.near").forEach(g=>g.classList.remove("near"));
+      if(id) document.querySelector(`[data-obj="${id}"]`)?.classList.add("near");
+      $("#status").innerHTML=id?`<b>${n.name}</b>: press <kbd>E</kbd> or tap it to inspect`:'Walk with <kbd>W A S D</kbd> or arrow keys, or tap the floor. Tap an object to inspect it.';
+      nearId=id;
+    }
+  }
+  requestAnimationFrame(tick);
+}
+setInterval(renderHUD,500);
+requestAnimationFrame(tick);
+showTitle();
+</script>
+
+</body>
+</html>
